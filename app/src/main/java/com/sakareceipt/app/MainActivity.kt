@@ -19,6 +19,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.util.Log
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -217,8 +221,95 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setupEdgeToEdge()
-        showDashboard()
+
+        installCrashCatcher()
+
+        // Jika peluncuran sebelumnya crash, tampilkan penyebabnya di layar
+        val prefs = getSharedPreferences("crash_log", MODE_PRIVATE)
+        val lastCrash = prefs.getString("last", null)
+        if (lastCrash != null) {
+            prefs.edit().remove("last").apply()
+            showCrashScreen(lastCrash)
+            return
+        }
+
+        try {
+            setupEdgeToEdge()
+            showDashboard()
+            applyNavBarAppearance()
+        } catch (t: Throwable) {
+            showCrashScreen(Log.getStackTraceString(t))
+        }
+    }
+
+    /* ---------------- PENANGKAP CRASH (untuk debugging dari HP) ---------------- */
+
+    private fun installCrashCatcher() {
+        val prefs = getSharedPreferences("crash_log", MODE_PRIVATE)
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                prefs.edit().putString("last", Log.getStackTraceString(error)).commit()
+            } catch (ignored: Throwable) {
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
+    private fun showCrashScreen(trace: String) {
+        val info = TextView(this).apply {
+            text = trace
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setTextColor(dark)
+            setTextIsSelectable(true)
+        }
+
+        val title = text("SakaReceipt berhenti karena error", 16f, dark, bold = true)
+        val hint = text(
+            "Tekan \"Salin error\" lalu kirim teksnya ke Claude.",
+            12f, muted
+        )
+
+        val copyBtn = Button(this).apply {
+            text = "Salin error"
+            setOnClickListener {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("SakaReceipt error", trace))
+                Toast.makeText(this@MainActivity, "Error disalin", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        val retryBtn = Button(this).apply {
+            text = "Coba buka aplikasi"
+            setOnClickListener {
+                try {
+                    setupEdgeToEdge()
+                    showDashboard()
+                    applyNavBarAppearance()
+                } catch (t: Throwable) {
+                    showCrashScreen(Log.getStackTraceString(t))
+                }
+            }
+        }
+
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(48), dp(16), dp(24))
+            addView(title)
+            addView(gapV(6))
+            addView(hint)
+            addView(gapV(12))
+            addView(copyBtn)
+            addView(retryBtn)
+            addView(gapV(12))
+            addView(info)
+        }
+
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(bg)
+            addView(column)
+        })
     }
 
     /* ---------------- SYSTEM BARS ---------------- */
@@ -230,10 +321,6 @@ class MainActivity : Activity() {
 
         if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
-            window.insetsController?.setSystemBarsAppearance(
-                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            )
         } else {
             var flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                     View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
@@ -242,6 +329,20 @@ class MainActivity : Activity() {
                 flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
             }
             window.decorView.systemUiVisibility = flags
+        }
+    }
+
+    // Dipanggil SETELAH setContentView. Memanggil insetsController sebelum itu
+    // bisa crash (NullPointerException) di Android 11/12.
+    private fun applyNavBarAppearance() {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                window.insetsController?.setSystemBarsAppearance(
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                )
+            }
+        } catch (ignored: Throwable) {
         }
     }
 
