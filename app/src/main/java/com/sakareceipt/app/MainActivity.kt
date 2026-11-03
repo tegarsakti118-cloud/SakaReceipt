@@ -1,56 +1,45 @@
-
 package com.sakareceipt.app
 
 import android.app.Activity
-import android.os.Bundle
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.os.Bundle
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 
 class MainActivity : Activity() {
 
     private val teal = Color.rgb(23, 168, 151)
+    private val tealDark = Color.rgb(13, 118, 108)
+    private val tealSoft = Color.rgb(224, 246, 243)
+    private val amberSoft = Color.rgb(255, 244, 214)
+    private val blueSoft = Color.rgb(224, 236, 255)
+    private val violetSoft = Color.rgb(237, 231, 255)
     private val dark = Color.rgb(30, 41, 59)
     private val muted = Color.rgb(120, 130, 145)
     private val bg = Color.rgb(246, 248, 250)
 
+    private val density by lazy { resources.displayMetrics.density }
+    private fun dp(v: Int): Int = (v * density + 0.5f).toInt()
+    private fun dpF(v: Float): Float = v * density
+
+    private lateinit var headerView: View
+    private lateinit var bottomBar: View
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = teal
+        window.navigationBarColor = Color.WHITE
         showDashboard()
     }
 
-    private fun background(color: Int, radius: Float): GradientDrawable {
-        return GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = radius
-        }
-    }
-
-    private fun text(
-        value: String,
-        size: Float,
-        color: Int,
-        bold: Boolean = false
-    ): TextView {
-        return TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(color)
-            if (bold) setTypeface(null, Typeface.BOLD)
-        }
-    }
-
-    private fun space(height: Int): View {
-        return View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                1,
-                height
-            )
-        }
-    }
+    // ---------- SCREEN ----------
 
     private fun showDashboard() {
         val root = LinearLayout(this).apply {
@@ -58,218 +47,307 @@ class MainActivity : Activity() {
             setBackgroundColor(bg)
         }
 
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            clipToPadding = false
-        }
-
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(20, 20, 20, 24)
+            setPadding(dp(16), 0, dp(16), dp(24))
         }
 
-        // HEADER
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(22, 25, 22, 25)
-            background = background(teal, 24f)
-        }
+        headerView = buildHeader()
+        content.addView(headerView, matchWrap())
 
-        header.addView(text("SAKARECEIPT", 13f, Color.WHITE, true))
-        header.addView(space(12))
-        header.addView(text("Kelola struk lebih mudah.", 22f, Color.WHITE, true))
-        header.addView(space(5))
-        header.addView(text(
-            "Smart Receipt Generator",
-            13f,
-            Color.WHITE
+        content.addView(gapV(24))
+        content.addView(sectionTitle("Dashboard", "Selamat datang di SakaReceipt"))
+        content.addView(gapV(16))
+        content.addView(statsRow())
+
+        content.addView(gapV(26))
+        content.addView(sectionLabel("BUAT STRUK BARU"))
+        content.addView(gapV(12))
+        content.addView(tileRow(
+            menuTile("🧾", "Bukti Transaksi", "Transfer dan tarik tunai", blueSoft) {
+                openFeature("Bukti Transaksi")
+            },
+            menuTile("⚡", "Token PLN", "Pembelian token listrik", amberSoft) {
+                openFeature("Token PLN")
+            }
+        ))
+        content.addView(gapV(12))
+        content.addView(tileRow(
+            menuTile("📄", "Bayar Tagihan", "PLN, PDAM, BPJS", violetSoft) {
+                openFeature("Bayar Tagihan")
+            },
+            menuTile("📚", "Riwayat", "Struk sebelumnya", tealSoft) {
+                openFeature("Riwayat")
+            }
         ))
 
-        content.addView(header)
+        content.addView(gapV(26))
+        content.addView(sectionLabel("PENGATURAN"))
+        content.addView(gapV(12))
+        content.addView(settingRow("🖨", "Printer Bluetooth", "Hubungkan printer thermal") {
+            openFeature("Printer Bluetooth")
+        })
+        content.addView(gapV(10))
+        content.addView(settingRow("⚙", "Pengaturan Usaha", "Identitas dan informasi usaha") {
+            openFeature("Pengaturan Usaha")
+        })
 
-        // DASHBOARD TITLE
-        content.addView(space(24))
-        content.addView(text("Dashboard", 22f, dark, true))
-        content.addView(space(5))
-        content.addView(text(
-            "Selamat datang di SakaReceipt",
-            13f,
-            muted
-        ))
-
-        // STATISTICS
-        content.addView(space(18))
-
-        val stats = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+        // Scroll area, dibatasi lebarnya agar rapi di tablet
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
-
-        stats.addView(statCard("0", "Total Struk"), LinearLayout.LayoutParams(0, 100, 1f))
-        stats.addView(View(this), LinearLayout.LayoutParams(12, 1))
-        stats.addView(statCard("0", "Hari Ini"), LinearLayout.LayoutParams(0, 100, 1f))
-
-        content.addView(stats)
-
-        // MAIN MENU
-        content.addView(space(25))
-        content.addView(text("BUAT STRUK BARU", 13f, dark, true))
-        content.addView(space(12))
-
-        val row1 = menuRow(
-            "🧾", "Bukti Transaksi", "Transfer dan tarik tunai",
-            "⚡", "Token PLN", "Pembelian token listrik"
-        )
-        content.addView(row1)
-
-        content.addView(space(12))
-
-        val row2 = menuRow(
-            "📄", "Bayar Tagihan", "PLN, PDAM, BPJS",
-            "📚", "Riwayat", "Struk sebelumnya"
-        )
-        content.addView(row2)
-
-        // OTHER MENU
-        content.addView(space(25))
-        content.addView(text("PENGATURAN", 13f, dark, true))
-        content.addView(space(12))
-
-        content.addView(simpleMenu("🖨", "Printer Bluetooth", "Hubungkan printer thermal"))
-        content.addView(space(10))
-        content.addView(simpleMenu("⚙", "Pengaturan Usaha", "Identitas dan informasi usaha"))
-
-        content.addView(space(15))
-
-        scroll.addView(content)
-
-        // BOTTOM NAVIGATION
-        val bottom = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.WHITE)
-            elevation = 12f
-            setPadding(5, 12, 5, 12)
-        }
-
-        bottom.addView(navItem("⌂", "Beranda", true), weightParams())
-        bottom.addView(navItem("▤", "Riwayat"), weightParams())
-        bottom.addView(navItem("⚙", "Pengaturan"), weightParams())
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+        val screenWidth = resources.displayMetrics.widthPixels
+        scroll.addView(
+            content,
+            FrameLayout.LayoutParams(
+                minOf(screenWidth, dp(560)),
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_HORIZONTAL
             )
         )
 
-        root.addView(bottom)
+        bottomBar = buildBottomBar()
+
+        root.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        root.addView(bottomBar, matchWrap())
+
+        // Menyesuaikan dengan status bar dan gesture bar di semua tipe HP
+        root.setOnApplyWindowInsetsListener { _, insets ->
+            headerView.setPadding(
+                dp(20), dp(20) + insets.systemWindowInsetTop, dp(20), dp(22)
+            )
+            bottomBar.setPadding(
+                dp(8), dp(8), dp(8), dp(10) + insets.systemWindowInsetBottom
+            )
+            insets
+        }
 
         setContentView(root)
     }
 
-    private fun weightParams(): LinearLayout.LayoutParams {
-        return LinearLayout.LayoutParams(0, 55, 1f)
+    private fun openFeature(name: String) {
+        Toast.makeText(this, "$name segera hadir", Toast.LENGTH_SHORT).show()
     }
 
-    private fun statCard(number: String, label: String): View {
-        val card = LinearLayout(this).apply {
+    // ---------- HEADER ----------
+
+    private fun buildHeader(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(20), dp(20), dp(22))
+        background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(teal, tealDark)
+        ).apply { cornerRadius = dpF(24f) }
+        elevation = dpF(4f)
+
+        addView(text("SAKARECEIPT", 12f, Color.WHITE, bold = true).apply {
+            letterSpacing = 0.12f
+        })
+        addView(gapV(10))
+        addView(text("Kelola struk lebih mudah.", 22f, Color.WHITE, bold = true, maxLines = 2))
+        addView(gapV(6))
+        addView(text("Smart Receipt Generator", 13f, Color.argb(220, 255, 255, 255), maxLines = 1))
+    }
+
+    // ---------- STATS ----------
+
+    private fun statsRow(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setMeasureWithLargestChildEnabled(true)
+        addView(statCard("🧾", "0", "Total Struk"), weightParams())
+        addView(gapH(12))
+        addView(statCard("📅", "0", "Hari Ini"), weightParams())
+    }
+
+    private fun statCard(icon: String, number: String, label: String): View =
+        LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = background(Color.WHITE, 18f)
-            elevation = 2f
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = rounded(Color.WHITE, 18f)
+            elevation = dpF(2f)
+
+            addView(iconChip(icon, tealSoft))
+            addView(gapV(10))
+            addView(text(number, 24f, dark, bold = true, maxLines = 1))
+            addView(gapV(2))
+            addView(text(label, 12f, muted, maxLines = 1))
         }
 
-        card.addView(text(number, 25f, teal, true))
-        card.addView(space(4))
-        card.addView(text(label, 12f, muted))
+    // ---------- MENU TILES ----------
 
-        return card
+    private fun tileRow(left: View, right: View): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setMeasureWithLargestChildEnabled(true)
+        addView(left, weightParams())
+        addView(gapH(12))
+        addView(right, weightParams())
     }
 
-    private fun menuRow(
-        icon1: String, title1: String, desc1: String,
-        icon2: String, title2: String, desc2: String
-    ): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
+    private fun menuTile(
+        icon: String,
+        title: String,
+        desc: String,
+        iconBg: Int,
+        onClick: () -> Unit
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(14), dp(14), dp(16))
+        background = rippleBg(Color.WHITE, 18f)
+        elevation = dpF(2f)
+        isClickable = true
+        setOnClickListener { onClick() }
 
-        row.addView(
-            menuCard(icon1, title1, desc1),
-            LinearLayout.LayoutParams(0, 135, 1f)
-        )
-
-        row.addView(View(this), LinearLayout.LayoutParams(12, 1))
-
-        row.addView(
-            menuCard(icon2, title2, desc2),
-            LinearLayout.LayoutParams(0, 135, 1f)
-        )
-
-        return row
+        addView(iconChip(icon, iconBg))
+        addView(gapV(12))
+        addView(text(title, 14f, dark, bold = true, maxLines = 2))
+        addView(gapV(4))
+        addView(text(desc, 12f, muted, maxLines = 2))
     }
 
-    private fun menuCard(icon: String, title: String, desc: String): View {
-        val card = LinearLayout(this).apply {
+    // ---------- SETTINGS ROWS ----------
+
+    private fun settingRow(
+        icon: String,
+        title: String,
+        desc: String,
+        onClick: () -> Unit
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(12), dp(12), dp(14), dp(12))
+        background = rippleBg(Color.WHITE, 16f)
+        elevation = dpF(2f)
+        isClickable = true
+        setOnClickListener { onClick() }
+
+        addView(iconChip(icon, tealSoft))
+
+        val labels = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(14, 14, 12, 12)
-            background = background(Color.WHITE, 18f)
-            elevation = 2f
+            setPadding(dp(14), 0, dp(8), 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            addView(text(title, 14f, dark, bold = true, maxLines = 1))
+            addView(gapV(3))
+            addView(text(desc, 12f, muted, maxLines = 2))
         }
+        addView(labels)
 
-        card.addView(text(icon, 25f, teal))
-        card.addView(space(8))
-        card.addView(text(title, 14f, dark, true))
-        card.addView(space(4))
-        card.addView(text(desc, 11f, muted))
-
-        return card
+        addView(text("›", 22f, muted))
     }
 
-    private fun simpleMenu(icon: String, title: String, desc: String): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(16, 14, 16, 14)
-            background = background(Color.WHITE, 16f)
-            elevation = 2f
-        }
+    // ---------- BOTTOM NAV ----------
 
-        val iconView = text(icon, 24f, teal)
-        row.addView(iconView)
+    private fun buildBottomBar(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        setBackgroundColor(Color.WHITE)
+        elevation = dpF(12f)
+        setPadding(dp(8), dp(8), dp(8), dp(10))
 
-        val labels = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(14, 0, 0, 0)
-        }
-
-        labels.addView(text(title, 14f, dark, true))
-        labels.addView(space(4))
-        labels.addView(text(desc, 11f, muted))
-
-        row.addView(labels)
-
-        return row
+        addView(navItem("⌂", "Beranda", selected = true) {
+            Toast.makeText(this@MainActivity, "Anda di Beranda", Toast.LENGTH_SHORT).show()
+        }, weightParams())
+        addView(navItem("▤", "Riwayat") { openFeature("Riwayat") }, weightParams())
+        addView(navItem("⚙", "Pengaturan") { openFeature("Pengaturan") }, weightParams())
     }
 
     private fun navItem(
         icon: String,
         label: String,
-        selected: Boolean = false
-    ): View {
-        val item = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-        }
+        selected: Boolean = false,
+        onClick: () -> Unit
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(0, dp(4), 0, dp(4))
+        isClickable = true
+        setOnClickListener { onClick() }
 
         val color = if (selected) teal else muted
 
-        item.addView(text(icon, 22f, color, true))
-        item.addView(space(3))
-        item.addView(text(label, 10f, color, selected))
-
-        return item
+        addView(TextView(this@MainActivity).apply {
+            text = icon
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(color)
+            setPadding(dp(18), dp(4), dp(18), dp(4))
+            background = if (selected) rounded(tealSoft, 16f) else null
+        })
+        addView(gapV(2))
+        addView(text(label, 11f, color, bold = selected, maxLines = 1))
     }
+
+    // ---------- SHARED HELPERS ----------
+
+    private fun rounded(color: Int, radiusDp: Float): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dpF(radiusDp)
+        }
+
+    private fun rippleBg(color: Int, radiusDp: Float): RippleDrawable =
+        RippleDrawable(
+            ColorStateList.valueOf(Color.argb(38, 23, 168, 151)),
+            rounded(color, radiusDp),
+            null
+        )
+
+    private fun iconChip(icon: String, soft: Int): TextView = TextView(this).apply {
+        text = icon
+        textSize = 20f
+        gravity = Gravity.CENTER
+        background = rounded(soft, 14f)
+        layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+    }
+
+    private fun sectionTitle(title: String, sub: String): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(title, 22f, dark, bold = true, maxLines = 1))
+            addView(gapV(4))
+            addView(text(sub, 13f, muted, maxLines = 2))
+        }
+
+    private fun sectionLabel(value: String): TextView =
+        text(value, 12f, dark, bold = true).apply { letterSpacing = 0.08f }
+
+    private fun text(
+        value: String,
+        sizeSp: Float,
+        color: Int,
+        bold: Boolean = false,
+        maxLines: Int = 0
+    ): TextView = TextView(this).apply {
+        text = value
+        textSize = sizeSp
+        setTextColor(color)
+        includeFontPadding = false
+        if (bold) typeface = Typeface.DEFAULT_BOLD
+        if (maxLines > 0) {
+            this.maxLines = maxLines
+            ellipsize = TextUtils.TruncateAt.END
+        }
+    }
+
+    private fun gapV(heightDp: Int): View = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp))
+    }
+
+    private fun gapH(widthDp: Int): View = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(widthDp), 1)
+    }
+
+    private fun matchWrap() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT
+    )
+
+    private fun weightParams() = LinearLayout.LayoutParams(
+        0,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        1f
+    )
 }
