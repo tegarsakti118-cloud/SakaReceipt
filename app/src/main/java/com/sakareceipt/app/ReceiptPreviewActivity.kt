@@ -78,8 +78,8 @@ class ReceiptPreviewActivity : Activity() {
                 }
 
                 when {
-                    !sharedText.isNullOrEmpty() -> showParsedText(sharedText)
                     sharedUri != null -> loadImage(sharedUri)
+                    !sharedText.isNullOrEmpty() -> showParsedText(sharedText)
                     else -> showShareError()
                 }
             }
