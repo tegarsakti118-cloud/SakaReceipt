@@ -1,6 +1,5 @@
 package com.sakareceipt.app
 
-import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
@@ -21,6 +20,8 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
 import android.content.ClipboardManager
 import android.util.Log
 import android.widget.Button
@@ -206,6 +207,10 @@ class MainActivity : Activity() {
     private val dark = Color.rgb(30, 41, 59)
     private val muted = Color.rgb(110, 120, 135)
     private val bg = Color.rgb(246, 248, 250)
+
+    private companion object {
+        const val REQUEST_PICK_IMAGE = 1001
+    }
 
     private val density by lazy { resources.displayMetrics.density }
     private fun dp(v: Int): Int = (v * density + 0.5f).toInt()
@@ -501,36 +506,41 @@ class MainActivity : Activity() {
         }
     }
 
-private val imagePicker =
-    registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            Toast.makeText(
-                this,
-                "Gambar berhasil dipilih",
-                Toast.LENGTH_SHORT
-            ).show()
+    // Gambar yang dipilih pengguna (dipakai di tahap OCR berikutnya)
+    private var selectedImageUri: Uri? = null
 
-            // Tahap berikutnya: tampilkan gambar dan proses OCR.
+    @Suppress("DEPRECATION")
+    private fun openImagePicker() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        startActivityForResult(
+            Intent.createChooser(intent, "Pilih screenshot struk"),
+            REQUEST_PICK_IMAGE
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_IMAGE && resultCode == RESULT_OK) {
+            val uri = data?.data
+            if (uri != null) {
+                selectedImageUri = uri
+                Toast.makeText(this, "Gambar berhasil dipilih", Toast.LENGTH_SHORT).show()
+
+                // Tahap berikutnya: tampilkan gambar dan proses OCR.
+            }
         }
     }
 
-private fun openFeature(name: String) {
-    when (name) {
-        "Bukti Transaksi" -> {
-            imagePicker.launch("image/*")
-        }
-
-        else -> {
-            Toast.makeText(
-                this,
-                "$name segera hadir",
-                Toast.LENGTH_SHORT
-            ).show()
+    private fun openFeature(name: String) {
+        when (name) {
+            "Bukti Transaksi" -> openImagePicker()
+            else -> Toast.makeText(this, "$name segera hadir", Toast.LENGTH_SHORT).show()
         }
     }
-}
 
     /* ---------------- HEADER ---------------- */
 
@@ -833,7 +843,3 @@ private fun openFeature(name: String) {
         0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
     )
 }
-
-   dependencies {
-    implementation 'androidx.activity:activity-ktx:1.9.3'
-   }
