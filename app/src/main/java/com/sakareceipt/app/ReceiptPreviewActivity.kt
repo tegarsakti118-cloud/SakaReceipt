@@ -52,13 +52,96 @@ class ReceiptPreviewActivity : Activity() {
         setContentView(buildLayout())
         textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-        val uri = intent?.data
-        if (uri == null) {
-            Toast.makeText(this, "Tidak ada gambar yang dipilih", Toast.LENGTH_SHORT).show()
+        handleIncomingIntent(intent)
+    }
+
+    /* ---------------- MENERIMA SHARE ANDROID ---------------- */
+
+    private fun handleIncomingIntent(incoming: Intent?) {
+        if (incoming == null) {
+            Toast.makeText(this, "Tidak ada data diterima", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
-        loadImage(uri)
+
+        when (incoming.action) {
+            Intent.ACTION_SEND -> {
+                val sharedText = incoming.getCharSequenceExtra(Intent.EXTRA_TEXT)
+                    ?.toString()
+                    ?.trim()
+
+                val sharedUri = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    incoming.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    incoming.getParcelableExtra(Intent.EXTRA_STREAM)
+                }
+
+                when {
+                    !sharedText.isNullOrEmpty() -> showParsedText(sharedText)
+                    sharedUri != null -> loadImage(sharedUri)
+                    else -> showShareError()
+                }
+            }
+
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    incoming.getParcelableArrayListExtra(
+                        Intent.EXTRA_STREAM, Uri::class.java
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    incoming.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+
+                val firstUri = uris?.firstOrNull()
+                if (firstUri != null) {
+                    loadImage(firstUri)
+                } else {
+                    showShareError()
+                }
+            }
+
+            else -> {
+                val uri = incoming.data
+                if (uri != null) loadImage(uri) else showShareError()
+            }
+        }
+    }
+
+    private fun showShareError() {
+        Toast.makeText(
+            this,
+            "Data yang dibagikan tidak didukung",
+            Toast.LENGTH_LONG
+        ).show()
+        finish()
+    }
+
+    private fun showParsedText(raw: String) {
+        // Sembunyikan area gambar jika sumber mengirim teks langsung.
+        (imageView.parent as? View)?.visibility = View.GONE
+
+        infoView.text = "Teks transaksi diterima dari aplikasi lain"
+        displayParsedResult(raw)
+    }
+
+    private fun displayParsedResult(raw: String) {
+        val parsed = parseReceipt(raw)
+
+        ocrResultView.text = buildString {
+            appendLine("HASIL EKSTRAKSI")
+            appendLine("Jenis transaksi: ${parsed.type}")
+            appendLine("Nominal: ${parsed.amount}")
+            appendLine("Tanggal: ${parsed.date}")
+            appendLine("Waktu: ${parsed.time}")
+            appendLine("Pengirim: ${parsed.sender}")
+            appendLine("Penerima: ${parsed.recipient}")
+            appendLine("No. referensi: ${parsed.reference}")
+            appendLine()
+            appendLine("TEKS ASLI")
+            append(raw)
+        }
     }
 
     /* ---------------- MEMUAT GAMBAR ---------------- */
@@ -110,23 +193,11 @@ class ReceiptPreviewActivity : Activity() {
         textRecognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val result = visionText.text.trim()
-                ocrResultView.text = if (result.isNotEmpty()) {
-                    val parsed = parseReceipt(result)
-                    buildString {
-                        appendLine("HASIL EKSTRAKSI")
-                        appendLine("Jenis transaksi: ${parsed.type}")
-                        appendLine("Nominal: ${parsed.amount}")
-                        appendLine("Tanggal: ${parsed.date}")
-                        appendLine("Waktu: ${parsed.time}")
-                        appendLine("Pengirim: ${parsed.sender}")
-                        appendLine("Penerima: ${parsed.recipient}")
-                        appendLine("No. referensi: ${parsed.reference}")
-                        appendLine()
-                        appendLine("TEKS OCR ASLI")
-                        append(result)
-                    }
+                if (result.isNotEmpty()) {
+                    displayParsedResult(result)
                 } else {
-                    "Tidak ada teks yang terdeteksi. Coba gambar yang lebih jelas."
+                    ocrResultView.text =
+                        "Tidak ada teks yang terdeteksi. Coba gambar yang lebih jelas."
                 }
             }
             .addOnFailureListener { error ->
