@@ -18,6 +18,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 class ReceiptPreviewActivity : Activity() {
 
@@ -39,10 +43,13 @@ class ReceiptPreviewActivity : Activity() {
 
     private lateinit var imageView: ImageView
     private lateinit var infoView: TextView
+    private lateinit var ocrResultView: TextView
+    private lateinit var textRecognizer: TextRecognizer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildLayout())
+        textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
         val uri = intent?.data
         if (uri == null) {
@@ -63,6 +70,7 @@ class ReceiptPreviewActivity : Activity() {
         }
         imageView.setImageBitmap(bitmap)
         infoView.text = "Ukuran gambar: ${bitmap.width} x ${bitmap.height} px"
+        runOcr(bitmap)
         return true
     }
 
@@ -89,6 +97,35 @@ class ReceiptPreviewActivity : Activity() {
             Log.e(TAG, "Gagal membaca gambar: $uri", e)
             null
         }
+    }
+
+    /* ---------------- OCR TEKS ---------------- */
+
+    private fun runOcr(bitmap: Bitmap) {
+        ocrResultView.text = "Sedang membaca teks gambar..."
+
+        val image = InputImage.fromBitmap(bitmap, 0)
+
+        textRecognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val result = visionText.text.trim()
+                ocrResultView.text = if (result.isNotEmpty()) {
+                    result
+                } else {
+                    "Tidak ada teks yang terdeteksi. Coba gambar yang lebih jelas."
+                }
+            }
+            .addOnFailureListener { error ->
+                Log.e(TAG, "OCR gagal", error)
+                ocrResultView.text = "Gagal membaca teks. Silakan coba lagi."
+            }
+    }
+
+    override fun onDestroy() {
+        if (::textRecognizer.isInitialized) {
+            textRecognizer.close()
+        }
+        super.onDestroy()
     }
 
     /* ---------------- PILIH ULANG ---------------- */
@@ -154,6 +191,26 @@ class ReceiptPreviewActivity : Activity() {
                 setMargins(dp(20), 0, dp(20), dp(4))
             }
         )
+        ocrResultView = text("Hasil pembacaan teks akan muncul di sini.", 13f, dark).apply {
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
+
+        val ocrScroll = ScrollView(this).apply {
+            background = rounded(Color.WHITE, 12f)
+            isFillViewport = true
+            addView(ocrResultView)
+        }
+
+        root.addView(
+            ocrScroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(130)
+            ).apply {
+                setMargins(dp(16), dp(4), dp(16), dp(8))
+            }
+        )
+
         root.addView(
             text("Pastikan teks pada gambar terlihat jelas sebelum diproses.", 12f, muted),
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
