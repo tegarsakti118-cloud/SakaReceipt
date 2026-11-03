@@ -1,28 +1,205 @@
 package com.sakareceipt.app
 
 import android.app.Activity
+import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+
+/* ------------------------------------------------------------------ */
+/*  IKON VEKTOR (digambar dengan Canvas, tidak perlu file drawable)    */
+/* ------------------------------------------------------------------ */
+
+enum class IconType {
+    RECEIPT, TRANSFER, BOLT, DOCUMENT, HISTORY, CALENDAR,
+    PRINTER, STORE, SLIDERS, HOME, CHEVRON
+}
+
+class IconView(
+    context: Context,
+    private val icon: IconType,
+    tint: Int
+) : View(context) {
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = 1.8f
+        color = tint
+    }
+    private val rect = RectF()
+
+    fun setTint(tint: Int) {
+        paint.color = tint
+        invalidate()
+    }
+
+    private fun path(block: Path.() -> Unit): Path = Path().apply(block)
+
+    private fun line(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float) =
+        c.drawLine(x1, y1, x2, y2, paint)
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val scale = minOf(width, height) / 24f
+        canvas.save()
+        canvas.translate((width - 24f * scale) / 2f, (height - 24f * scale) / 2f)
+        canvas.scale(scale, scale)
+
+        when (icon) {
+            IconType.RECEIPT -> {
+                canvas.drawPath(path {
+                    moveTo(6f, 3f); lineTo(18f, 3f); lineTo(18f, 21f)
+                    lineTo(16f, 19.5f); lineTo(14f, 21f); lineTo(12f, 19.5f)
+                    lineTo(10f, 21f); lineTo(8f, 19.5f); lineTo(6f, 21f); close()
+                }, paint)
+                line(canvas, 9f, 8f, 15f, 8f)
+                line(canvas, 9f, 12f, 15f, 12f)
+                line(canvas, 9f, 16f, 12.5f, 16f)
+            }
+
+            IconType.TRANSFER -> {
+                line(canvas, 4f, 8f, 19f, 8f)
+                canvas.drawPath(path {
+                    moveTo(15f, 4f); lineTo(19f, 8f); lineTo(15f, 12f)
+                }, paint)
+                line(canvas, 20f, 16f, 5f, 16f)
+                canvas.drawPath(path {
+                    moveTo(9f, 12f); lineTo(5f, 16f); lineTo(9f, 20f)
+                }, paint)
+            }
+
+            IconType.BOLT -> {
+                canvas.drawPath(path {
+                    moveTo(13.5f, 2.5f); lineTo(5f, 13.5f); lineTo(11f, 13.5f)
+                    lineTo(10f, 21.5f); lineTo(19f, 10f); lineTo(13f, 10f); close()
+                }, paint)
+            }
+
+            IconType.DOCUMENT -> {
+                canvas.drawPath(path {
+                    moveTo(6f, 3f); lineTo(14f, 3f); lineTo(19f, 8f)
+                    lineTo(19f, 21f); lineTo(6f, 21f); close()
+                }, paint)
+                canvas.drawPath(path {
+                    moveTo(14f, 3f); lineTo(14f, 8f); lineTo(19f, 8f)
+                }, paint)
+                line(canvas, 9f, 13f, 16f, 13f)
+                line(canvas, 9f, 17f, 16f, 17f)
+            }
+
+            IconType.HISTORY -> {
+                canvas.drawCircle(12f, 12f, 8.5f, paint)
+                canvas.drawPath(path {
+                    moveTo(12f, 7.5f); lineTo(12f, 12f); lineTo(15f, 14f)
+                }, paint)
+            }
+
+            IconType.CALENDAR -> {
+                rect.set(4f, 5f, 20f, 20f)
+                canvas.drawRoundRect(rect, 3f, 3f, paint)
+                line(canvas, 4f, 10f, 20f, 10f)
+                line(canvas, 8f, 3f, 8f, 7f)
+                line(canvas, 16f, 3f, 16f, 7f)
+                line(canvas, 8.5f, 14f, 8.6f, 14f)
+                line(canvas, 12f, 14f, 12.1f, 14f)
+                line(canvas, 15.5f, 14f, 15.6f, 14f)
+            }
+
+            IconType.PRINTER -> {
+                canvas.drawPath(path {
+                    moveTo(7f, 9f); lineTo(7f, 3f); lineTo(17f, 3f); lineTo(17f, 9f)
+                }, paint)
+                rect.set(3.5f, 9f, 20.5f, 17.5f)
+                canvas.drawRoundRect(rect, 2.5f, 2.5f, paint)
+                canvas.drawPath(path {
+                    moveTo(7f, 14f); lineTo(17f, 14f); lineTo(17f, 21f)
+                    lineTo(7f, 21f); close()
+                }, paint)
+            }
+
+            IconType.STORE -> {
+                canvas.drawPath(path {
+                    moveTo(3.5f, 9f); lineTo(5f, 4f); lineTo(19f, 4f); lineTo(20.5f, 9f)
+                }, paint)
+                line(canvas, 3.5f, 9f, 20.5f, 9f)
+                canvas.drawPath(path {
+                    moveTo(5f, 9f); lineTo(5f, 20f); lineTo(19f, 20f); lineTo(19f, 9f)
+                }, paint)
+                canvas.drawPath(path {
+                    moveTo(10f, 20f); lineTo(10f, 14.5f); lineTo(14f, 14.5f); lineTo(14f, 20f)
+                }, paint)
+            }
+
+            IconType.SLIDERS -> {
+                line(canvas, 4f, 7f, 6.5f, 7f); line(canvas, 11.5f, 7f, 20f, 7f)
+                canvas.drawCircle(9f, 7f, 2.5f, paint)
+                line(canvas, 4f, 12f, 12.5f, 12f); line(canvas, 17.5f, 12f, 20f, 12f)
+                canvas.drawCircle(15f, 12f, 2.5f, paint)
+                line(canvas, 4f, 17f, 5.5f, 17f); line(canvas, 10.5f, 17f, 20f, 17f)
+                canvas.drawCircle(8f, 17f, 2.5f, paint)
+            }
+
+            IconType.HOME -> {
+                canvas.drawPath(path {
+                    moveTo(3.5f, 11f); lineTo(12f, 4f); lineTo(20.5f, 11f)
+                }, paint)
+                canvas.drawPath(path {
+                    moveTo(6f, 9.5f); lineTo(6f, 20f); lineTo(18f, 20f); lineTo(18f, 9.5f)
+                }, paint)
+                canvas.drawPath(path {
+                    moveTo(10f, 20f); lineTo(10f, 14.5f); lineTo(14f, 14.5f); lineTo(14f, 20f)
+                }, paint)
+            }
+
+            IconType.CHEVRON -> {
+                canvas.drawPath(path {
+                    moveTo(9f, 5.5f); lineTo(15.5f, 12f); lineTo(9f, 18.5f)
+                }, paint)
+            }
+        }
+        canvas.restore()
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  ACTIVITY                                                           */
+/* ------------------------------------------------------------------ */
 
 class MainActivity : Activity() {
 
+    // Palet warna
     private val teal = Color.rgb(23, 168, 151)
-    private val tealDark = Color.rgb(13, 118, 108)
+    private val tealDark = Color.rgb(11, 112, 102)
     private val tealSoft = Color.rgb(224, 246, 243)
-    private val amberSoft = Color.rgb(255, 244, 214)
-    private val blueSoft = Color.rgb(224, 236, 255)
-    private val violetSoft = Color.rgb(237, 231, 255)
+    private val blue = Color.rgb(37, 99, 235)
+    private val blueSoft = Color.rgb(226, 236, 255)
+    private val amber = Color.rgb(217, 119, 6)
+    private val amberSoft = Color.rgb(255, 243, 212)
+    private val violet = Color.rgb(124, 58, 237)
+    private val violetSoft = Color.rgb(238, 232, 255)
     private val dark = Color.rgb(30, 41, 59)
-    private val muted = Color.rgb(120, 130, 145)
+    private val muted = Color.rgb(110, 120, 135)
     private val bg = Color.rgb(246, 248, 250)
 
     private val density by lazy { resources.displayMetrics.density }
@@ -30,16 +207,82 @@ class MainActivity : Activity() {
     private fun dpF(v: Float): Float = v * density
 
     private lateinit var headerView: View
+    private lateinit var bodyView: LinearLayout
     private lateinit var bottomBar: View
+
+    private var insetL = 0
+    private var insetT = 0
+    private var insetR = 0
+    private var insetB = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = teal
-        window.navigationBarColor = Color.WHITE
+        setupEdgeToEdge()
         showDashboard()
     }
 
-    // ---------- SCREEN ----------
+    /* ---------------- SYSTEM BARS ---------------- */
+
+    @Suppress("DEPRECATION")
+    private fun setupEdgeToEdge() {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+            window.insetsController?.setSystemBarsAppearance(
+                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        } else {
+            var flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            if (Build.VERSION.SDK_INT >= 26) {
+                flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+            }
+            window.decorView.systemUiVisibility = flags
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readInsets(insets: WindowInsets) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val i = insets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            insetL = i.left; insetT = i.top; insetR = i.right; insetB = i.bottom
+        } else {
+            insetL = insets.systemWindowInsetLeft
+            insetT = insets.systemWindowInsetTop
+            insetR = insets.systemWindowInsetRight
+            insetB = insets.systemWindowInsetBottom
+        }
+    }
+
+    // Padding mengikuti status bar, gesture bar, poni, dan lebar layar (tablet/lipat)
+    private fun applyInsets() {
+        val screenW = resources.displayMetrics.widthPixels
+        val contentW = minOf(screenW, dp(600))
+        val side = (screenW - contentW) / 2
+
+        headerView.setPadding(
+            side + dp(20) + insetL,
+            insetT + dp(24),
+            side + dp(20) + insetR,
+            dp(54)
+        )
+        bodyView.setPadding(
+            side + dp(16) + insetL, 0,
+            side + dp(16) + insetR, dp(24)
+        )
+        bottomBar.setPadding(
+            dp(8) + insetL, dp(8),
+            dp(8) + insetR, dp(8) + insetB
+        )
+    }
+
+    /* ---------------- SCREEN ---------------- */
 
     private fun showDashboard() {
         val root = LinearLayout(this).apply {
@@ -47,240 +290,326 @@ class MainActivity : Activity() {
             setBackgroundColor(bg)
         }
 
-        val content = LinearLayout(this).apply {
+        val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), 0, dp(16), dp(24))
         }
 
         headerView = buildHeader()
-        content.addView(headerView, matchWrap())
+        column.addView(headerView, matchWrap())
 
-        content.addView(gapV(24))
-        content.addView(sectionTitle("Dashboard", "Selamat datang di SakaReceipt"))
-        content.addView(gapV(16))
-        content.addView(statsRow())
+        bodyView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(bodyView, matchWrap())
 
-        content.addView(gapV(26))
-        content.addView(sectionLabel("BUAT STRUK BARU"))
-        content.addView(gapV(12))
-        content.addView(tileRow(
-            menuTile("🧾", "Bukti Transaksi", "Transfer dan tarik tunai", blueSoft) {
-                openFeature("Bukti Transaksi")
-            },
-            menuTile("⚡", "Token PLN", "Pembelian token listrik", amberSoft) {
-                openFeature("Token PLN")
-            }
+        val animated = mutableListOf<View>(headerView)
+
+        fun add(v: View, params: ViewGroup.LayoutParams? = null, animate: Boolean = true) {
+            if (params != null) bodyView.addView(v, params) else bodyView.addView(v)
+            if (animate) animated.add(v)
+        }
+
+        // Kartu statistik menimpa sebagian header
+        add(
+            statsRow(),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = -dp(34) }
+        )
+
+        add(gapV(26), animate = false)
+        add(sectionLabel("BUAT STRUK BARU"))
+        add(gapV(12), animate = false)
+
+        add(tileRow(
+            menuTile(
+                IconType.TRANSFER, blue, blueSoft,
+                "Bukti Transaksi", "Transfer dan tarik tunai"
+            ) { openFeature("Bukti Transaksi") },
+            menuTile(
+                IconType.BOLT, amber, amberSoft,
+                "Token PLN", "Pembelian token listrik"
+            ) { openFeature("Token PLN") }
         ))
-        content.addView(gapV(12))
-        content.addView(tileRow(
-            menuTile("📄", "Bayar Tagihan", "PLN, PDAM, BPJS", violetSoft) {
-                openFeature("Bayar Tagihan")
-            },
-            menuTile("📚", "Riwayat", "Struk sebelumnya", tealSoft) {
-                openFeature("Riwayat")
-            }
+        add(gapV(12), animate = false)
+        add(tileRow(
+            menuTile(
+                IconType.DOCUMENT, violet, violetSoft,
+                "Bayar Tagihan", "PLN, PDAM, BPJS"
+            ) { openFeature("Bayar Tagihan") },
+            menuTile(
+                IconType.HISTORY, teal, tealSoft,
+                "Riwayat", "Struk sebelumnya"
+            ) { openFeature("Riwayat") }
         ))
 
-        content.addView(gapV(26))
-        content.addView(sectionLabel("PENGATURAN"))
-        content.addView(gapV(12))
-        content.addView(settingRow("🖨", "Printer Bluetooth", "Hubungkan printer thermal") {
-            openFeature("Printer Bluetooth")
-        })
-        content.addView(gapV(10))
-        content.addView(settingRow("⚙", "Pengaturan Usaha", "Identitas dan informasi usaha") {
-            openFeature("Pengaturan Usaha")
-        })
+        add(gapV(26), animate = false)
+        add(sectionLabel("PENGATURAN"))
+        add(gapV(12), animate = false)
+        add(settingRow(
+            IconType.PRINTER, "Printer Bluetooth", "Hubungkan printer thermal"
+        ) { openFeature("Printer Bluetooth") })
+        add(gapV(10), animate = false)
+        add(settingRow(
+            IconType.STORE, "Pengaturan Usaha", "Identitas dan informasi usaha"
+        ) { openFeature("Pengaturan Usaha") })
 
-        // Scroll area, dibatasi lebarnya agar rapi di tablet
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+            addView(column)
         }
-        val screenWidth = resources.displayMetrics.widthPixels
-        scroll.addView(
-            content,
-            FrameLayout.LayoutParams(
-                minOf(screenWidth, dp(560)),
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER_HORIZONTAL
-            )
-        )
 
         bottomBar = buildBottomBar()
 
-        root.addView(scroll, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
         root.addView(bottomBar, matchWrap())
 
-        // Menyesuaikan dengan status bar dan gesture bar di semua tipe HP
         root.setOnApplyWindowInsetsListener { _, insets ->
-            headerView.setPadding(
-                dp(20), dp(20) + insets.systemWindowInsetTop, dp(20), dp(22)
-            )
-            bottomBar.setPadding(
-                dp(8), dp(8), dp(8), dp(10) + insets.systemWindowInsetBottom
-            )
+            readInsets(insets)
+            applyInsets()
             insets
         }
+        applyInsets()
 
         setContentView(root)
+        root.requestApplyInsets()
+
+        animateIn(animated)
     }
 
+    private fun animateIn(views: List<View>) {
+        views.forEachIndexed { index, v ->
+            v.alpha = 0f
+            v.translationY = dpF(14f)
+            v.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(50L * index)
+                .setDuration(320L)
+                .start()
+        }
+    }
+
+    // Ganti isi fungsi ini dengan startActivity(Intent(...)) untuk tiap fitur
     private fun openFeature(name: String) {
         Toast.makeText(this, "$name segera hadir", Toast.LENGTH_SHORT).show()
     }
 
-    // ---------- HEADER ----------
+    /* ---------------- HEADER ---------------- */
 
-    private fun buildHeader(): View = LinearLayout(this).apply {
+    // Header dengan dua lingkaran dekoratif tipis
+    private inner class HeaderLayout(context: Context) : LinearLayout(context) {
+        private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+        init { setWillNotDraw(false) }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            canvas.save()
+            canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
+            dot.alpha = 24
+            canvas.drawCircle(width - dpF(36f), dpF(24f), dpF(96f), dot)
+            dot.alpha = 16
+            canvas.drawCircle(width - dpF(120f), dpF(92f), dpF(44f), dot)
+            canvas.restore()
+        }
+    }
+
+    private fun buildHeader(): View = HeaderLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), dp(20), dp(20), dp(22))
+        val r = dpF(30f)
         background = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(teal, tealDark)
-        ).apply { cornerRadius = dpF(24f) }
-        elevation = dpF(4f)
+        ).apply { cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r) }
+        elevation = dpF(3f)
 
-        addView(text("SAKARECEIPT", 12f, Color.WHITE, bold = true).apply {
-            letterSpacing = 0.12f
+        // Baris merek
+        val brand = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val logo = FrameLayout(this@MainActivity).apply {
+            background = rounded(Color.argb(46, 255, 255, 255), 12f)
+            addView(
+                IconView(this@MainActivity, IconType.RECEIPT, Color.WHITE),
+                FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
+            )
+        }
+        brand.addView(logo, LinearLayout.LayoutParams(dp(36), dp(36)))
+        brand.addView(gapH(10))
+        brand.addView(text("SAKARECEIPT", 13f, Color.WHITE, bold = true).apply {
+            letterSpacing = 0.14f
         })
-        addView(gapV(10))
-        addView(text("Kelola struk lebih mudah.", 22f, Color.WHITE, bold = true, maxLines = 2))
+        addView(brand)
+
+        addView(gapV(18))
+        addView(text("Kelola struk lebih mudah.", 24f, Color.WHITE, bold = true, maxLines = 2))
         addView(gapV(6))
-        addView(text("Smart Receipt Generator", 13f, Color.argb(220, 255, 255, 255), maxLines = 1))
+        addView(
+            text(
+                "Smart Receipt Generator",
+                13f, Color.argb(225, 255, 255, 255), maxLines = 1
+            )
+        )
     }
 
-    // ---------- STATS ----------
+    /* ---------------- STATISTIK ---------------- */
 
     private fun statsRow(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        setMeasureWithLargestChildEnabled(true)
-        addView(statCard("🧾", "0", "Total Struk"), weightParams())
+        addView(
+            statCard(IconType.RECEIPT, teal, tealSoft, "0", "Total Struk"),
+            weightParams()
+        )
         addView(gapH(12))
-        addView(statCard("📅", "0", "Hari Ini"), weightParams())
+        addView(
+            statCard(IconType.CALENDAR, blue, blueSoft, "0", "Hari Ini"),
+            weightParams()
+        )
     }
 
-    private fun statCard(icon: String, number: String, label: String): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = rounded(Color.WHITE, 18f)
-            elevation = dpF(2f)
+    private fun statCard(
+        icon: IconType, tint: Int, soft: Int, number: String, label: String
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        background = rounded(Color.WHITE, 20f)
+        elevation = dpF(5f)
+        contentDescription = "$label: $number"
 
-            addView(iconChip(icon, tealSoft))
-            addView(gapV(10))
-            addView(text(number, 24f, dark, bold = true, maxLines = 1))
+        addView(iconChip(icon, tint, soft, 44, 22))
+
+        val col = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+            addView(text(number, 22f, dark, bold = true, maxLines = 1))
             addView(gapV(2))
             addView(text(label, 12f, muted, maxLines = 1))
         }
+        addView(
+            col,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+    }
 
-    // ---------- MENU TILES ----------
+    /* ---------------- MENU UTAMA ---------------- */
 
     private fun tileRow(left: View, right: View): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        setMeasureWithLargestChildEnabled(true)
         addView(left, weightParams())
         addView(gapH(12))
         addView(right, weightParams())
     }
 
     private fun menuTile(
-        icon: String,
-        title: String,
-        desc: String,
-        iconBg: Int,
+        icon: IconType, tint: Int, soft: Int,
+        title: String, desc: String,
         onClick: () -> Unit
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(14), dp(14), dp(14), dp(16))
-        background = rippleBg(Color.WHITE, 18f)
+        background = rippleBg(Color.WHITE, 20f)
         elevation = dpF(2f)
         isClickable = true
+        contentDescription = "$title. $desc"
         setOnClickListener { onClick() }
 
-        addView(iconChip(icon, iconBg))
-        addView(gapV(12))
+        addView(iconChip(icon, tint, soft, 46, 24))
+        addView(gapV(14))
         addView(text(title, 14f, dark, bold = true, maxLines = 2))
         addView(gapV(4))
         addView(text(desc, 12f, muted, maxLines = 2))
     }
 
-    // ---------- SETTINGS ROWS ----------
+    /* ---------------- PENGATURAN ---------------- */
 
     private fun settingRow(
-        icon: String,
-        title: String,
-        desc: String,
-        onClick: () -> Unit
+        icon: IconType, title: String, desc: String, onClick: () -> Unit
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(12), dp(12), dp(14), dp(12))
-        background = rippleBg(Color.WHITE, 16f)
+        background = rippleBg(Color.WHITE, 18f)
         elevation = dpF(2f)
         isClickable = true
+        contentDescription = "$title. $desc"
         setOnClickListener { onClick() }
 
-        addView(iconChip(icon, tealSoft))
+        addView(iconChip(icon, teal, tealSoft, 46, 24))
 
         val labels = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), 0, dp(8), 0)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             addView(text(title, 14f, dark, bold = true, maxLines = 1))
             addView(gapV(3))
             addView(text(desc, 12f, muted, maxLines = 2))
         }
-        addView(labels)
+        addView(
+            labels,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
 
-        addView(text("›", 22f, muted))
+        addView(
+            IconView(this@MainActivity, IconType.CHEVRON, muted),
+            LinearLayout.LayoutParams(dp(20), dp(20))
+        )
     }
 
-    // ---------- BOTTOM NAV ----------
+    /* ---------------- BOTTOM NAV ---------------- */
 
     private fun buildBottomBar(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setBackgroundColor(Color.WHITE)
         elevation = dpF(12f)
-        setPadding(dp(8), dp(8), dp(8), dp(10))
 
-        addView(navItem("⌂", "Beranda", selected = true) {
-            Toast.makeText(this@MainActivity, "Anda di Beranda", Toast.LENGTH_SHORT).show()
-        }, weightParams())
-        addView(navItem("▤", "Riwayat") { openFeature("Riwayat") }, weightParams())
-        addView(navItem("⚙", "Pengaturan") { openFeature("Pengaturan") }, weightParams())
+        addView(
+            navItem(IconType.HOME, "Beranda", selected = true) {
+                Toast.makeText(this@MainActivity, "Anda sudah di Beranda", Toast.LENGTH_SHORT).show()
+            },
+            weightParams()
+        )
+        addView(
+            navItem(IconType.HISTORY, "Riwayat") { openFeature("Riwayat") },
+            weightParams()
+        )
+        addView(
+            navItem(IconType.SLIDERS, "Pengaturan") { openFeature("Pengaturan") },
+            weightParams()
+        )
     }
 
     private fun navItem(
-        icon: String,
-        label: String,
-        selected: Boolean = false,
-        onClick: () -> Unit
+        icon: IconType, label: String, selected: Boolean = false, onClick: () -> Unit
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        setPadding(0, dp(4), 0, dp(4))
+        setPadding(0, dp(4), 0, dp(2))
         isClickable = true
+        contentDescription = label
         setOnClickListener { onClick() }
 
         val color = if (selected) teal else muted
 
-        addView(TextView(this@MainActivity).apply {
-            text = icon
-            textSize = 20f
-            gravity = Gravity.CENTER
-            setTextColor(color)
-            setPadding(dp(18), dp(4), dp(18), dp(4))
-            background = if (selected) rounded(tealSoft, 16f) else null
-        })
+        val pill = FrameLayout(this@MainActivity).apply {
+            if (selected) background = rounded(tealSoft, 16f)
+            addView(
+                IconView(this@MainActivity, icon, color),
+                FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER)
+            )
+        }
+        addView(pill, LinearLayout.LayoutParams(dp(60), dp(32)))
         addView(gapV(2))
         addView(text(label, 11f, color, bold = selected, maxLines = 1))
     }
 
-    // ---------- SHARED HELPERS ----------
+    /* ---------------- HELPER ---------------- */
 
     private fun rounded(color: Int, radiusDp: Float): GradientDrawable =
         GradientDrawable().apply {
@@ -290,26 +619,21 @@ class MainActivity : Activity() {
 
     private fun rippleBg(color: Int, radiusDp: Float): RippleDrawable =
         RippleDrawable(
-            ColorStateList.valueOf(Color.argb(38, 23, 168, 151)),
+            ColorStateList.valueOf(Color.argb(40, 23, 168, 151)),
             rounded(color, radiusDp),
-            null
+            rounded(Color.WHITE, radiusDp)
         )
 
-    private fun iconChip(icon: String, soft: Int): TextView = TextView(this).apply {
-        text = icon
-        textSize = 20f
-        gravity = Gravity.CENTER
+    private fun iconChip(
+        icon: IconType, tint: Int, soft: Int, sizeDp: Int, iconDp: Int
+    ): View = FrameLayout(this).apply {
         background = rounded(soft, 14f)
-        layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+        layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+        addView(
+            IconView(this@MainActivity, icon, tint),
+            FrameLayout.LayoutParams(dp(iconDp), dp(iconDp), Gravity.CENTER)
+        )
     }
-
-    private fun sectionTitle(title: String, sub: String): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(text(title, 22f, dark, bold = true, maxLines = 1))
-            addView(gapV(4))
-            addView(text(sub, 13f, muted, maxLines = 2))
-        }
 
     private fun sectionLabel(value: String): TextView =
         text(value, 12f, dark, bold = true).apply { letterSpacing = 0.08f }
@@ -333,7 +657,9 @@ class MainActivity : Activity() {
     }
 
     private fun gapV(heightDp: Int): View = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp)
+        )
     }
 
     private fun gapH(widthDp: Int): View = View(this).apply {
@@ -345,9 +671,8 @@ class MainActivity : Activity() {
         ViewGroup.LayoutParams.WRAP_CONTENT
     )
 
+    // Lebar bagi rata, tinggi mengikuti kartu tertinggi dalam satu baris
     private fun weightParams() = LinearLayout.LayoutParams(
-        0,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-        1f
+        0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
     )
 }
