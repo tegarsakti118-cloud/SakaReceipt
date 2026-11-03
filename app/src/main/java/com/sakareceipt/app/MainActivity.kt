@@ -537,11 +537,6 @@ class MainActivity : Activity() {
             startActivity(intent)
         }
     }
-                // Tahap berikutnya: tampilkan gambar dan proses OCR.
-            }
-        }
-    }
-
     private fun openFeature(name: String) {
         when (name) {
             "Bukti Transaksi" -> openImagePicker()
