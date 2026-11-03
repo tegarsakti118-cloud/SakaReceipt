@@ -393,12 +393,17 @@ class MainActivity : Activity() {
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            clipChildren = false
         }
 
         headerView = buildHeader()
         column.addView(headerView, matchWrap())
 
-        bodyView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        bodyView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
         column.addView(bodyView, matchWrap())
 
         val animated = mutableListOf<View>(headerView)
@@ -527,7 +532,6 @@ class MainActivity : Activity() {
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(teal, tealDark)
         ).apply { cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r) }
-        elevation = dpF(3f)
 
         // Baris merek
         val brand = LinearLayout(this@MainActivity).apply {
@@ -559,9 +563,32 @@ class MainActivity : Activity() {
         )
     }
 
+    // Baris horizontal yang semua anaknya otomatis setinggi anak tertinggi
+    private inner class EqualRow(context: Context) : LinearLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+
+            var maxH = 0
+            for (i in 0 until childCount) {
+                val c = getChildAt(i)
+                if (c.visibility != View.GONE) maxH = maxOf(maxH, c.measuredHeight)
+            }
+            for (i in 0 until childCount) {
+                val c = getChildAt(i)
+                if (c.visibility != View.GONE && c.measuredHeight != maxH) {
+                    c.measure(
+                        View.MeasureSpec.makeMeasureSpec(c.measuredWidth, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(maxH, View.MeasureSpec.EXACTLY)
+                    )
+                }
+            }
+            setMeasuredDimension(measuredWidth, maxH + paddingTop + paddingBottom)
+        }
+    }
+
     /* ---------------- STATISTIK ---------------- */
 
-    private fun statsRow(): View = LinearLayout(this).apply {
+    private fun statsRow(): View = EqualRow(this).apply {
         orientation = LinearLayout.HORIZONTAL
         addView(
             statCard(IconType.RECEIPT, teal, tealSoft, "0", "Total Struk"),
@@ -601,7 +628,7 @@ class MainActivity : Activity() {
 
     /* ---------------- MENU UTAMA ---------------- */
 
-    private fun tileRow(left: View, right: View): View = LinearLayout(this).apply {
+    private fun tileRow(left: View, right: View): View = EqualRow(this).apply {
         orientation = LinearLayout.HORIZONTAL
         addView(left, weightParams())
         addView(gapH(12))
@@ -707,7 +734,9 @@ class MainActivity : Activity() {
         }
         addView(pill, LinearLayout.LayoutParams(dp(60), dp(32)))
         addView(gapV(2))
-        addView(text(label, 11f, color, bold = selected, maxLines = 1))
+        addView(text(label, 11f, color, bold = selected, maxLines = 1).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
     }
 
     /* ---------------- HELPER ---------------- */
@@ -772,8 +801,8 @@ class MainActivity : Activity() {
         ViewGroup.LayoutParams.WRAP_CONTENT
     )
 
-    // Lebar bagi rata, tinggi mengikuti kartu tertinggi dalam satu baris
+    // Lebar bagi rata. Tinggi disamakan oleh EqualRow, bukan oleh MATCH_PARENT.
     private fun weightParams() = LinearLayout.LayoutParams(
-        0, ViewGroup.LayoutParams.MATCH_PARENT, 1f
+        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
     )
 }
