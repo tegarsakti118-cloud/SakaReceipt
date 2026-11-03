@@ -1,5 +1,6 @@
 package com.sakareceipt.app
 
+import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.content.Context
 import android.content.res.ColorStateList
@@ -500,10 +501,36 @@ class MainActivity : Activity() {
         }
     }
 
-    // Ganti isi fungsi ini dengan startActivity(Intent(...)) untuk tiap fitur
-    private fun openFeature(name: String) {
-        Toast.makeText(this, "$name segera hadir", Toast.LENGTH_SHORT).show()
+private val imagePicker =
+    registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            Toast.makeText(
+                this,
+                "Gambar berhasil dipilih",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            // Tahap berikutnya: tampilkan gambar dan proses OCR.
+        }
     }
+
+private fun openFeature(name: String) {
+    when (name) {
+        "Bukti Transaksi" -> {
+            imagePicker.launch("image/*")
+        }
+
+        else -> {
+            Toast.makeText(
+                this,
+                "$name segera hadir",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
 
     /* ---------------- HEADER ---------------- */
 
@@ -806,3 +833,7 @@ class MainActivity : Activity() {
         0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
     )
 }
+
+   dependencies {
+    implementation 'androidx.activity:activity-ktx:1.9.3'
+   }
