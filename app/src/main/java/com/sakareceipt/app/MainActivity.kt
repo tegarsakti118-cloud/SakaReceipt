@@ -521,15 +521,22 @@ class MainActivity : Activity() {
         )
     }
 
-    @Suppress("DEPRECATION")
+        @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_PICK_IMAGE && resultCode == RESULT_OK) {
-            val uri = data?.data
-            if (uri != null) {
-                selectedImageUri = uri
-                Toast.makeText(this, "Gambar berhasil dipilih", Toast.LENGTH_SHORT).show()
+            val uri = data?.data ?: return
+            selectedImageUri = uri
 
+            // Kirim URI ke layar preview. Flag ini memberi izin baca sementara
+            // agar layar preview bisa membuka gambar dari galeri.
+            val intent = Intent(this, ReceiptPreviewActivity::class.java).apply {
+                setData(uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        }
+    }
                 // Tahap berikutnya: tampilkan gambar dan proses OCR.
             }
         }
