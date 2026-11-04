@@ -327,187 +327,220 @@ class ReceiptPreviewActivity : Activity() {
         val reference: String = ""
     )
 
-    private fun parseReceipt(raw: String): ParsedReceipt {
-        val lines = raw.lines()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+    
+private fun parseReceipt(raw: String): ParsedReceipt {
+    val lines = raw.lines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
 
-        val lower = raw.lowercase()
+    val lower = raw.lowercase()
 
-        val invalidNameWords = Regex(
-            """(?i)\b(rekening|nominal|transfer|transaksi|berhasil|tujuan|pengirim|penerima|struk|token|pln|total|admin|biaya|bank|detail|reference|account|payment)\b"""
+    fun valueAfterLabel(line: String, label: String): String {
+        return line.replaceFirst(
+            Regex("""(?i)^${Regex.escape(label)}\s*:\s*"""),
+            ""
+        ).trim()
+    }
+
+    fun cleanAccount(value: String): String {
+        return value.replace(Regex("""\s+"""), "").trim()
+    }
+
+    fun isNameValue(value: String): Boolean {
+        val v = value.trim()
+        if (v.length < 2 || v.length > 60) return false
+        if (v.any { it.isDigit() }) return false
+        if (v.none { it.isLetter() }) return false
+
+        val invalid = Regex(
+            """(?i)\b(rekening|nominal|transfer|transaksi|berhasil|tujuan|pengirim|penerima|struk|token|pln|total|admin|biaya|bank|detail|reference|account|payment|bri|seabank|dana)\b"""
         )
 
-        fun isNameValue(value: String): Boolean {
-            val v = value.trim()
-            if (v.length < 2 || v.length > 60) return false
-            if (v.none { it.isLetter() }) return false
-            if (v.any { it.isDigit() }) return false
-            if (invalidNameWords.containsMatchIn(v)) return false
-            if (v.startsWith("BANK", true)) return false
-            if (v.equals("BBRI", true)) return false
-            if (v.equals("DANA", true)) return false
-            if (v.contains("xxx", true)) return false
-            return true
-        }
+        return !invalid.containsMatchIn(v)
+    }
 
-        // JENIS TRANSAKSI
-        val type = when {
-            "bi-fast" in lower -> "Transfer BI-FAST"
-            "transfer" in lower || "send money" in lower ||
-                "kirim uang" in lower -> "Transfer"
-            "tarik tunai" in lower || "penarikan" in lower -> "Tarik Tunai"
-            "setor tunai" in lower || "setoran" in lower -> "Setor Tunai"
-            "token listrik" in lower || "pln prabayar" in lower -> "Token PLN"
-            "pln" in lower || "pdam" in lower || "bpjs" in lower ||
-                "tagihan" in lower || "pembayaran" in lower -> "Bayar Tagihan"
-            "top up" in lower || "topup" in lower -> "Top Up"
-            else -> ""
-        }
+    // JENIS TRANSAKSI
+    val type = when {
+        "bi-fast" in lower -> "Transfer BI-FAST"
+        "token listrik" in lower || "pln prabayar" in lower ->
+            "Token PLN"
+        "tarik tunai" in lower || "penarikan" in lower ->
+            "Tarik Tunai"
+        "setor tunai" in lower || "setoran" in lower ->
+            "Setor Tunai"
+        "transfer" in lower || "send money" in lower ||
+            "kirim uang" in lower -> "Transfer"
+        "pln" in lower || "pdam" in lower ||
+            "bpjs" in lower || "tagihan" in lower ||
+            "pembayaran" in lower -> "Bayar Tagihan"
+        "top up" in lower || "topup" in lower -> "Top Up"
+        else -> ""
+    }
 
-        // NOMINAL
-        val rpRegex = Regex("""(?i)rp\.?\s*\d[\d.,]*""")
-        val excludedAmount = Regex(
-            """(?i)\b(biaya|admin|fee|total|pajak|saldo)\b"""
-        )
+    // NOMINAL
+    val amount = lines.firstNotNullOfOrNull { line ->
+        if (
+            Regex("""(?i)\b(biaya|admin|fee|total|pajak|saldo|jumlah total)\b""")
+                .containsMatchIn(line)
+        ) return@firstNotNullOfOrNull null
 
-        var amount = ""
+        Regex("""(?i)rp\.?\s*[\d.,]+""")
+            .find(line)?.value?.trim()
+    }.orEmpty()
 
-        for (line in lines) {
-            if (excludedAmount.containsMatchIn(line)) continue
+    // TANGGAL, termasuk format OCR 31 Oct 202619:00
+    val monthNames =
+        """januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|aug|sep|okt|oct|nov|des|dec"""
 
-            val found = rpRegex.find(line)?.value
-            if (found != null) {
-                amount = found.trimEnd('.', ',')
-                break
-            }
-        }
+    val dateRegex = Regex(
+        """(?i)\b\d{1,2}\s+(?:$monthNames)\s+\d{4}(?=\s|[,|:]|\d{1,2}[:.]\d{2}|$)|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b"""
+    )
 
-        // TANGGAL
-        val date = Regex(
-            """(?i)\b(?:\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b"""
-        ).find(raw)?.value.orEmpty()
+    val date = dateRegex.find(raw)?.value.orEmpty()
 
-        // WAKTU
-        val time = Regex(
-            """\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b"""
-        ).find(raw)?.value.orEmpty()
+    // WAKTU
+    val time = Regex(
+        """\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b"""
+    ).find(raw)?.value.orEmpty()
 
-        // REFERENSI
-        val reference = lines.firstNotNullOfOrNull { line ->
-            val match = Regex(
-                """(?i)^(?:no\.?\s*referensi|nomor\s*referensi|kode\s*referensi)\s*[:：]?\s*(.*)$"""
-            ).find(line) ?: return@firstNotNullOfOrNull null
+    // REFERENSI
+    val reference = lines.firstNotNullOfOrNull { line ->
+        val match = Regex(
+            """(?i)^(?:no\.?\s*referensi|nomor\s*referensi|kode\s*referensi)\s*[:：]?\s*(.*)$"""
+        ).find(line) ?: return@firstNotNullOfOrNull null
 
-            val value = match.groupValues[1].trim()
+        match.groupValues[1].trim()
+            .takeIf { it.matches(Regex("""[A-Za-z0-9\-/]{4,}""")) }
+    }.orEmpty()
 
-            if (value.matches(Regex("""[A-Za-z0-9\-/]{4,}"""))) {
-                value
-            } else {
-                null
-            }
-        }.orEmpty()
+    var sender = ""
+    var senderAccount = ""
+    var recipient = ""
+    var recipientAccount = ""
 
-        // NAMA
-        var sender = ""
-        var recipient = ""
+    // FORMAT SEABANK
+    val fromLine = lines.firstOrNull {
+        it.startsWith("Dari ", true)
+    }
 
-        // DANA: Name TEGAR ... dan lanjutan baris AN
-        val nameIndex = lines.indexOfFirst {
-            it.startsWith("Name ", ignoreCase = true)
-        }
+    if (fromLine != null) {
+        sender = fromLine.substringAfter("Dari ").trim()
+    }
 
-        if (nameIndex >= 0) {
-            recipient = lines[nameIndex]
-                .substringAfter("Name ", "")
-                .trim()
+    val toLine = lines.firstOrNull {
+        it.startsWith("Ke ", true)
+    }
 
-            val continuation = lines.getOrNull(nameIndex + 1)
-                ?.takeIf {
-                    it.matches(Regex("""[A-Za-z]{1,5}"""))
-                }.orEmpty()
+    if (toLine != null) {
+        recipient = toLine.substringAfter("Ke ").trim()
+    }
 
-            recipient += continuation
-            sender = "DANA"
-        }
+    val seaBankLine = lines.firstOrNull {
+        it.startsWith("SeaBank:", true)
+    }
 
-        // REKENING
-        var senderAccount = ""
-        var recipientAccount = ""
-
-        // DANA: Bank Account ***45 lalu 38
-        val bankAccountIndex = lines.indexOfFirst {
-            it.contains("Bank Account", ignoreCase = true)
-        }
-
-        if (bankAccountIndex >= 0) {
-            val accountLine = lines[bankAccountIndex]
-
-            val maskedAccount = Regex(
-                """\*{2,}\s*\d{2,}"""
-            ).find(accountLine)?.value.orEmpty()
-
-            if (maskedAccount.isNotEmpty()) {
-                val continuation = lines.getOrNull(bankAccountIndex + 1)
-                    ?.takeIf { it.matches(Regex("""\d{2,}""")) }
-                    .orEmpty()
-
-                recipientAccount =
-                    maskedAccount.replace(" ", "") + continuation
-            }
-        }
-
-        // QITA BRI: dua baris BANK BRI-5655
-        val briIndexes = lines.indices.filter { index ->
-            Regex("""(?i)^BANK\s+BRI-?5655""")
-                .containsMatchIn(lines[index])
-        }
-
-        if (briIndexes.size >= 2) {
-            fun getBriAccount(index: Int): String {
-                return lines[index]
-                    .replaceFirst(
-                        Regex("""(?i)^BANK\s+BRI-?5655"""),
-                        ""
-                    )
-                    .trim()
-            }
-
-            senderAccount = getBriAccount(briIndexes[0])
-            recipientAccount = getBriAccount(briIndexes[1])
-
-            fun findNameBefore(
-                index: Int,
-                lowerLimit: Int
-            ): String {
-                for (i in index - 1 downTo lowerLimit) {
-                    if (isNameValue(lines[i])) return lines[i]
-                }
-                return ""
-            }
-
-            val senderName = findNameBefore(briIndexes[0], 0)
-            val recipientName = findNameBefore(
-                briIndexes[1],
-                briIndexes[0] + 1
-            )
-
-            if (senderName.isNotEmpty()) sender = senderName
-            if (recipientName.isNotEmpty()) recipient = recipientName
-        }
-
-        return ParsedReceipt(
-            type = type,
-            amount = amount,
-            date = date,
-            time = time,
-            sender = sender,
-            senderAccount = senderAccount,
-            recipient = recipient,
-            recipientAccount = recipientAccount,
-            reference = reference
+    if (seaBankLine != null) {
+        senderAccount = cleanAccount(
+            valueAfterLabel(seaBankLine, "SeaBank")
         )
     }
+
+    val briLine = lines.firstOrNull {
+        it.startsWith("BRI:", true)
+    }
+
+    if (briLine != null) {
+        recipientAccount = cleanAccount(
+            valueAfterLabel(briLine, "BRI")
+        )
+    }
+
+    // FORMAT DANA
+    val nameIndex = lines.indexOfFirst {
+        it.startsWith("Name ", true)
+    }
+
+    if (nameIndex >= 0) {
+        recipient = lines[nameIndex]
+            .substringAfter("Name ", "")
+            .trim()
+
+        val continuation = lines.getOrNull(nameIndex + 1)
+            ?.takeIf { it.matches(Regex("""[A-Za-z]{1,5}""")) }
+            .orEmpty()
+
+        recipient += continuation
+        sender = "DANA"
+    }
+
+    val bankAccountIndex = lines.indexOfFirst {
+        it.contains("Bank Account", true)
+    }
+
+    if (bankAccountIndex >= 0) {
+        val accountLine = lines[bankAccountIndex]
+
+        val masked = Regex(
+            """\*{2,}\s*\d+"""
+        ).find(accountLine)?.value.orEmpty()
+
+        val continuation = lines.getOrNull(bankAccountIndex + 1)
+            ?.takeIf { it.matches(Regex("""\d{2,}""")) }
+            .orEmpty()
+
+        if (masked.isNotEmpty()) {
+            recipientAccount = cleanAccount(masked + continuation)
+        }
+    }
+
+    // FORMAT QITA BRI
+    val briIndexes = lines.indices.filter { index ->
+        Regex("""(?i)^BANK\s+BRI\s*-\s*5655""")
+            .containsMatchIn(lines[index])
+    }
+
+    if (briIndexes.size >= 2) {
+        fun getBriAccount(index: Int): String {
+            val remainder = lines[index].replaceFirst(
+                Regex("""(?i)^BANK\s+BRI\s*-\s*5655"""),
+                ""
+            )
+            return cleanAccount(remainder)
+        }
+
+        senderAccount = getBriAccount(briIndexes[0])
+        recipientAccount = getBriAccount(briIndexes[1])
+
+        fun findNameBefore(index: Int, lowerLimit: Int): String {
+            for (i in index - 1 downTo lowerLimit) {
+                if (isNameValue(lines[i])) return lines[i]
+            }
+            return ""
+        }
+
+        val senderName = findNameBefore(briIndexes[0], 0)
+        val recipientName = findNameBefore(
+            briIndexes[1],
+            briIndexes[0] + 1
+        )
+
+        if (senderName.isNotEmpty()) sender = senderName
+        if (recipientName.isNotEmpty()) recipient = recipientName
+    }
+
+    return ParsedReceipt(
+        type = type,
+        amount = amount,
+        date = date,
+        time = time,
+        sender = sender,
+        senderAccount = senderAccount,
+        recipient = recipient,
+        recipientAccount = recipientAccount,
+        reference = reference
+    )
+}
+
 
     override fun onDestroy() {
         if (::textRecognizer.isInitialized) {
