@@ -1,3 +1,4 @@
+
 package com.sakareceipt.app
 
 import android.app.Activity
@@ -51,28 +52,31 @@ class ReceiptPreviewActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildLayout())
-        textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
+        textRecognizer = TextRecognition.getClient(
+            TextRecognizerOptions.DEFAULT_OPTIONS
+        )
         handleIncomingIntent(intent)
     }
 
-    /* ---------------- MENERIMA SHARE ANDROID ---------------- */
+    /* ---------------- SHARE ANDROID ---------------- */
 
     private fun handleIncomingIntent(incoming: Intent?) {
         if (incoming == null) {
-            Toast.makeText(this, "Tidak ada data diterima", Toast.LENGTH_SHORT).show()
-            finish()
+            showShareError()
             return
         }
 
         when (incoming.action) {
             Intent.ACTION_SEND -> {
-                val sharedText = incoming.getCharSequenceExtra(Intent.EXTRA_TEXT)
-                    ?.toString()
-                    ?.trim()
+                val sharedText = incoming.getCharSequenceExtra(
+                    Intent.EXTRA_TEXT
+                )?.toString()?.trim()
 
                 val sharedUri = if (android.os.Build.VERSION.SDK_INT >= 33) {
-                    incoming.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    incoming.getParcelableExtra(
+                        Intent.EXTRA_STREAM,
+                        Uri::class.java
+                    )
                 } else {
                     @Suppress("DEPRECATION")
                     incoming.getParcelableExtra(Intent.EXTRA_STREAM)
@@ -88,24 +92,25 @@ class ReceiptPreviewActivity : Activity() {
             Intent.ACTION_SEND_MULTIPLE -> {
                 val uris = if (android.os.Build.VERSION.SDK_INT >= 33) {
                     incoming.getParcelableArrayListExtra(
-                        Intent.EXTRA_STREAM, Uri::class.java
+                        Intent.EXTRA_STREAM,
+                        Uri::class.java
                     )
                 } else {
                     @Suppress("DEPRECATION")
-                    incoming.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                    incoming.getParcelableArrayListExtra<Uri>(
+                        Intent.EXTRA_STREAM
+                    )
                 }
 
                 val firstUri = uris?.firstOrNull()
-                if (firstUri != null) {
-                    loadImage(firstUri)
-                } else {
-                    showShareError()
-                }
+                if (firstUri != null) loadImage(firstUri)
+                else showShareError()
             }
 
             else -> {
                 val uri = incoming.data
-                if (uri != null) loadImage(uri) else showShareError()
+                if (uri != null) loadImage(uri)
+                else showShareError()
             }
         }
     }
@@ -120,9 +125,7 @@ class ReceiptPreviewActivity : Activity() {
     }
 
     private fun showParsedText(raw: String) {
-        // Sembunyikan area gambar jika sumber mengirim teks langsung.
         (imageView.parent as? View)?.visibility = View.GONE
-
         infoView.text = "Teks transaksi diterima dari aplikasi lain"
         displayParsedResult(raw)
     }
@@ -137,7 +140,9 @@ class ReceiptPreviewActivity : Activity() {
             appendLine("Tanggal: ${parsed.date}")
             appendLine("Waktu: ${parsed.time}")
             appendLine("Pengirim: ${parsed.sender}")
+            appendLine("Rekening pengirim: ${parsed.senderAccount}")
             appendLine("Penerima: ${parsed.recipient}")
+            appendLine("Rekening penerima: ${parsed.recipientAccount}")
             appendLine("No. referensi: ${parsed.reference}")
             appendLine()
             appendLine("TEKS ASLI")
@@ -145,46 +150,68 @@ class ReceiptPreviewActivity : Activity() {
         }
     }
 
-    /* ---------------- MEMUAT GAMBAR ---------------- */
+    /* ---------------- GAMBAR ---------------- */
 
     private fun loadImage(uri: Uri): Boolean {
         val bitmap = decodeSampled(uri)
         if (bitmap == null) {
-            Toast.makeText(this, "Gambar tidak bisa dibuka", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Gambar tidak bisa dibuka",
+                Toast.LENGTH_SHORT
+            ).show()
             return false
         }
+
         imageView.setImageBitmap(bitmap)
         infoView.text = "Ukuran gambar: ${bitmap.width} x ${bitmap.height} px"
         runOcr(bitmap)
         return true
     }
 
-    // Membaca ukuran asli dulu, lalu memperkecil saat decode agar tidak kehabisan memori
     private fun decodeSampled(uri: Uri): Bitmap? {
         return try {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            val boundsStream = contentResolver.openInputStream(uri) ?: return null
-            boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val bounds = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
 
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            val boundsStream = contentResolver.openInputStream(uri)
+                ?: return null
+
+            boundsStream.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                return null
+            }
 
             var sample = 1
-            while (bounds.outWidth / (sample * 2) >= MAX_DECODE_PX ||
+
+            while (
+                bounds.outWidth / (sample * 2) >= MAX_DECODE_PX ||
                 bounds.outHeight / (sample * 2) >= MAX_DECODE_PX
             ) {
                 sample *= 2
             }
 
-            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-            val dataStream = contentResolver.openInputStream(uri) ?: return null
-            dataStream.use { BitmapFactory.decodeStream(it, null, opts) }
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+            }
+
+            val dataStream = contentResolver.openInputStream(uri)
+                ?: return null
+
+            dataStream.use {
+                BitmapFactory.decodeStream(it, null, opts)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Gagal membaca gambar: $uri", e)
             null
         }
     }
 
-    /* ---------------- OCR TEKS ---------------- */
+    /* ---------------- OCR ---------------- */
 
     private fun runOcr(bitmap: Bitmap) {
         ocrResultView.text = "Sedang membaca teks gambar..."
@@ -193,8 +220,13 @@ class ReceiptPreviewActivity : Activity() {
 
         textRecognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val result = rebuildRows(visionText, bitmap.height).trim()
-                    .ifEmpty { visionText.text.trim() }
+                val result = rebuildRows(
+                    visionText,
+                    bitmap.height
+                ).trim().ifEmpty {
+                    visionText.text.trim()
+                }
+
                 if (result.isNotEmpty()) {
                     displayParsedResult(result)
                 } else {
@@ -204,17 +236,23 @@ class ReceiptPreviewActivity : Activity() {
             }
             .addOnFailureListener { error ->
                 Log.e(TAG, "OCR gagal", error)
-                ocrResultView.text = "Gagal membaca teks. Silakan coba lagi."
+                ocrResultView.text =
+                    "Gagal membaca teks. Silakan coba lagi."
             }
     }
 
-    /* ---------------- SUSUN ULANG BARIS OCR ---------------- */
+    /* ---------------- SUSUN BARIS OCR ---------------- */
 
-    // ML Kit sering memisahkan kolom label (kiri) dan nilai (kanan) menjadi blok berbeda,
-    // sehingga "Nominal" dan "Rp1.150.000" tidak berurutan di teks. Fungsi ini menyatukan
-    // kembali potongan teks yang sejajar secara vertikal berdasarkan posisinya di gambar.
-    private fun rebuildRows(visionText: Text, imageHeight: Int): String {
-        class Piece(val text: String, val left: Int, val centerY: Float, val height: Float)
+    private fun rebuildRows(
+        visionText: Text,
+        imageHeight: Int
+    ): String {
+        class Piece(
+            val text: String,
+            val left: Int,
+            val centerY: Float,
+            val height: Float
+        )
 
         val clockRegex = Regex("""^\d{1,2}[:.]\d{2}\b.{0,6}$""")
         val pieces = mutableListOf<Piece>()
@@ -226,12 +264,24 @@ class ReceiptPreviewActivity : Activity() {
                 if (value.isEmpty()) continue
 
                 val cy = box.exactCenterY()
-                // Jam status bar HP di bagian paling atas screenshot bukan waktu transaksi.
-                if (imageHeight > 0 && cy < imageHeight * 0.06f && clockRegex.matches(value)) continue
 
-                pieces.add(Piece(value, box.left, cy, box.height().toFloat()))
+                if (
+                    imageHeight > 0 &&
+                    cy < imageHeight * 0.06f &&
+                    clockRegex.matches(value)
+                ) continue
+
+                pieces.add(
+                    Piece(
+                        value,
+                        box.left,
+                        cy,
+                        box.height().toFloat()
+                    )
+                )
             }
         }
+
         if (pieces.isEmpty()) return ""
 
         pieces.sortBy { it.centerY }
@@ -239,10 +289,15 @@ class ReceiptPreviewActivity : Activity() {
         val rows = mutableListOf<MutableList<Piece>>()
         var rowCenter = 0f
         var rowHeight = 0f
+
         for (p in pieces) {
             val current = rows.lastOrNull()
             val tolerance = 0.5f * minOf(p.height, rowHeight)
-            if (current != null && Math.abs(p.centerY - rowCenter) <= tolerance) {
+
+            if (
+                current != null &&
+                kotlin.math.abs(p.centerY - rowCenter) <= tolerance
+            ) {
                 current.add(p)
                 rowCenter = current.map { it.centerY }.average().toFloat()
                 rowHeight = current.map { it.height }.average().toFloat()
@@ -258,7 +313,7 @@ class ReceiptPreviewActivity : Activity() {
         }
     }
 
-    /* ---------------- EKSTRAKSI DATA TRANSAKSI ---------------- */
+    /* ---------------- PARSED DATA ---------------- */
 
     private data class ParsedReceipt(
         val type: String = "",
@@ -266,7 +321,9 @@ class ReceiptPreviewActivity : Activity() {
         val date: String = "",
         val time: String = "",
         val sender: String = "",
+        val senderAccount: String = "",
         val recipient: String = "",
+        val recipientAccount: String = "",
         val reference: String = ""
     )
 
@@ -277,69 +334,28 @@ class ReceiptPreviewActivity : Activity() {
 
         val lower = raw.lowercase()
 
-        // Label lain yang menandakan akhir sebuah nilai. Pencarian tidak boleh melewatinya.
-        val labelStop = Regex(
-            """(?i)^(dari|ke|kepada|pengirim|penerima|nama|data|bank|tujuan|rekening|no\.?\s*rekening|no\.?\s*meter|biaya|admin|fee|nominal|jumlah|total|tanggal|waktu|tid|ref|referensi|kode|id|nomor|metode|status|keterangan|pembayaran|jenis)\b"""
-        )
-
-        // Nama bank atau aplikasi. Tidak boleh dianggap sebagai nama pengirim atau penerima.
-        val bankOrApp = Regex(
-            """(?i)^(qita|seabank|bri|bca|bni|mandiri|bsi|jago|bank\b.*|dana|gopay|go-?pay|ovo|shopeepay|qris)$"""
-        )
-
-        // Kata yang tidak mungkin muncul di dalam nama orang.
-        val nonNameWords = Regex(
-            """(?i)\b(rekening|nominal|transfer|transaksi|berhasil|tujuan|pengirim|penerima|struk|token|pln|bantuan|simpan|terima|kasih|tid|total|admin|biaya)\b"""
+        val invalidNameWords = Regex(
+            """(?i)\b(rekening|nominal|transfer|transaksi|berhasil|tujuan|pengirim|penerima|struk|token|pln|total|admin|biaya|bank|detail|reference|account|payment)\b"""
         )
 
         fun isNameValue(value: String): Boolean {
-            if (value.length < 2 || value.length > 60) return false
-            if (value.none { it.isLetter() }) return false
-            if (value.any { it.isDigit() }) return false
-            if (value.contains("xxx", ignoreCase = true)) return false
-            if (labelStop.containsMatchIn(value)) return false
-            if (bankOrApp.matches(value)) return false
-            if (nonNameWords.containsMatchIn(value)) return false
+            val v = value.trim()
+            if (v.length < 2 || v.length > 60) return false
+            if (v.none { it.isLetter() }) return false
+            if (v.any { it.isDigit() }) return false
+            if (invalidNameWords.containsMatchIn(v)) return false
+            if (v.startsWith("BANK", true)) return false
+            if (v.equals("BBRI", true)) return false
+            if (v.equals("DANA", true)) return false
+            if (v.contains("xxx", true)) return false
             return true
         }
 
-        fun isReferenceValue(value: String): Boolean {
-            if (labelStop.containsMatchIn(value)) return false
-            if (!Regex("""[A-Za-z0-9][A-Za-z0-9\-/]{3,}""").matches(value)) return false
-            return value.any { it.isDigit() }
-        }
-
-        // Mencari nilai setelah label. Nilai boleh berada di baris yang sama
-        // atau di maksimal 2 baris berikutnya. Berhenti jika bertemu label lain.
-        fun findValue(labels: List<String>, isValid: (String) -> Boolean): String {
-            for (i in lines.indices) {
-                for (label in labels) {
-                    val labelRegex = Regex(
-                        "^${Regex.escape(label)}\\b\\s*[:：-]?\\s*(.*)$",
-                        RegexOption.IGNORE_CASE
-                    )
-                    val match = labelRegex.find(lines[i]) ?: continue
-                    val sameLine = match.groupValues[1].trim()
-
-                    if (sameLine.isNotEmpty() && isValid(sameLine)) return sameLine
-
-                    for (j in i + 1 until minOf(i + 3, lines.size)) {
-                        val next = lines[j]
-                        if (labelStop.containsMatchIn(next)) break
-                        if (bankOrApp.matches(next)) continue
-                        if (isValid(next)) return next
-                        break
-                    }
-                }
-            }
-            return ""
-        }
-
+        // JENIS TRANSAKSI
         val type = when {
             "bi-fast" in lower -> "Transfer BI-FAST"
-            "transfer" in lower -> "Transfer"
-            "bank tujuan" in lower || "data penerima" in lower -> "Transfer"
-            "send money" in lower || "kirim uang" in lower -> "Transfer"
+            "transfer" in lower || "send money" in lower ||
+                "kirim uang" in lower -> "Transfer"
             "tarik tunai" in lower || "penarikan" in lower -> "Tarik Tunai"
             "setor tunai" in lower || "setoran" in lower -> "Setor Tunai"
             "token listrik" in lower || "pln prabayar" in lower -> "Token PLN"
@@ -349,98 +365,136 @@ class ReceiptPreviewActivity : Activity() {
             else -> ""
         }
 
-        // ---- Nominal ----
-        val rpAmount = Regex("""(?i)rp\.?\s*\d[\d.,]*""")
-        val plainAmount = Regex("""\d{1,3}(?:[.,]\d{3})+""")
-        val excludedAmountLine = Regex("""(?i)\b(biaya|admin|fee|total|pajak|saldo)\b""")
-        val adminLine = Regex("""(?i)\b(biaya|admin|fee)\b""")
-        val totalLine = Regex("""(?i)\btotal\b""")
-        val hasAdminFee = lines.any { adminLine.containsMatchIn(it) }
-
-        // Nominal dari satu teks. Baris biaya, admin, total, dan saldo selalu diabaikan.
-        fun amountIn(text: String, allowPlain: Boolean): String {
-            if (excludedAmountLine.containsMatchIn(text)) return ""
-            val rp = rpAmount.find(text)?.value
-            if (rp != null) return rp.trimEnd('.', ',')
-            if (!allowPlain) return ""
-            return plainAmount.find(text)?.value.orEmpty()
-        }
-
-        // Prioritas 1: nominal yang diberi label.
-        val amountLabels = listOf(
-            "jumlah transfer", "nominal transfer", "nominal pembayaran",
-            "jumlah pembayaran", "nominal", "jumlah"
+        // NOMINAL
+        val rpRegex = Regex("""(?i)rp\.?\s*\d[\d.,]*""")
+        val excludedAmount = Regex(
+            """(?i)\b(biaya|admin|fee|total|pajak|saldo)\b"""
         )
 
         var amount = ""
-        labelLoop@ for (label in amountLabels) {
-            val labelRegex = Regex(
-                "^${Regex.escape(label)}\\b\\s*[:：-]?\\s*(.*)$",
-                RegexOption.IGNORE_CASE
-            )
-            for (i in lines.indices) {
-                val match = labelRegex.find(lines[i]) ?: continue
-                val sameLine = match.groupValues[1].trim()
 
-                val fromSameLine = amountIn(sameLine, allowPlain = true)
-                if (fromSameLine.isNotEmpty()) {
-                    amount = fromSameLine
-                    break@labelLoop
-                }
+        for (line in lines) {
+            if (excludedAmount.containsMatchIn(line)) continue
 
-                // Nilai di baris berikutnya, hanya jika baris itu bukan label lain.
-                if (sameLine.isEmpty() && i + 1 < lines.size &&
-                    !labelStop.containsMatchIn(lines[i + 1])
-                ) {
-                    val fromNextLine = amountIn(lines[i + 1], allowPlain = false)
-                    if (fromNextLine.isNotEmpty()) {
-                        amount = fromNextLine
-                        break@labelLoop
-                    }
-                }
+            val found = rpRegex.find(line)?.value
+            if (found != null) {
+                amount = found.trimEnd('.', ',')
+                break
             }
         }
 
-        // Fallback 1: hanya jika tepat satu nominal Rp di luar baris biaya dan total.
-        if (amount.isEmpty()) {
-            val candidates = lines.map { amountIn(it, allowPlain = false) }
-                .filter { it.isNotEmpty() }
-                .distinct()
-            if (candidates.size == 1) amount = candidates[0]
-        }
-
-        // Fallback 2: total dipakai hanya jika struk tidak punya biaya admin (misalnya token PLN).
-        if (amount.isEmpty() && !hasAdminFee) {
-            val totals = lines
-                .filter { totalLine.containsMatchIn(it) }
-                .mapNotNull { rpAmount.find(it)?.value?.trimEnd('.', ',') }
-                .distinct()
-            if (totals.size == 1) amount = totals[0]
-        }
-
+        // TANGGAL
         val date = Regex(
             """(?i)\b(?:\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b"""
         ).find(raw)?.value.orEmpty()
 
+        // WAKTU
         val time = Regex(
             """\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b"""
         ).find(raw)?.value.orEmpty()
 
-        // Nomor referensi hanya dari label referensi. ID transaksi tidak dipakai.
-        val reference = findValue(
-            listOf("No. Referensi", "Nomor Referensi", "Kode Referensi", "Reference ID", "Reference", "Ref"),
-            { isReferenceValue(it) }
-        )
+        // REFERENSI
+        val reference = lines.firstNotNullOfOrNull { line ->
+            val match = Regex(
+                """(?i)^(?:no\.?\s*referensi|nomor\s*referensi|kode\s*referensi)\s*[:：]?\s*(.*)$"""
+            ).find(line) ?: return@firstNotNullOfOrNull null
 
-        val sender = findValue(
-            listOf("Nama Pengirim", "Pengirim", "Dari"),
-            { isNameValue(it) }
-        )
+            val value = match.groupValues[1].trim()
 
-        val recipient = findValue(
-            listOf("Nama Penerima", "Penerima", "Kepada", "Ke", "Tujuan"),
-            { isNameValue(it) }
-        )
+            if (value.matches(Regex("""[A-Za-z0-9\-/]{4,}"""))) {
+                value
+            } else {
+                null
+            }
+        }.orEmpty()
+
+        // NAMA
+        var sender = ""
+        var recipient = ""
+
+        // DANA: Name TEGAR ... dan lanjutan baris AN
+        val nameIndex = lines.indexOfFirst {
+            it.startsWith("Name ", ignoreCase = true)
+        }
+
+        if (nameIndex >= 0) {
+            recipient = lines[nameIndex]
+                .substringAfter("Name ", "")
+                .trim()
+
+            val continuation = lines.getOrNull(nameIndex + 1)
+                ?.takeIf {
+                    it.matches(Regex("""[A-Za-z]{1,5}"""))
+                }.orEmpty()
+
+            recipient += continuation
+            sender = "DANA"
+        }
+
+        // REKENING
+        var senderAccount = ""
+        var recipientAccount = ""
+
+        // DANA: Bank Account ***45 lalu 38
+        val bankAccountIndex = lines.indexOfFirst {
+            it.contains("Bank Account", ignoreCase = true)
+        }
+
+        if (bankAccountIndex >= 0) {
+            val accountLine = lines[bankAccountIndex]
+
+            val maskedAccount = Regex(
+                """\*{2,}\s*\d{2,}"""
+            ).find(accountLine)?.value.orEmpty()
+
+            if (maskedAccount.isNotEmpty()) {
+                val continuation = lines.getOrNull(bankAccountIndex + 1)
+                    ?.takeIf { it.matches(Regex("""\d{2,}""")) }
+                    .orEmpty()
+
+                recipientAccount =
+                    maskedAccount.replace(" ", "") + continuation
+            }
+        }
+
+        // QITA BRI: dua baris BANK BRI-5655
+        val briIndexes = lines.indices.filter { index ->
+            Regex("""(?i)^BANK\s+BRI-?5655""")
+                .containsMatchIn(lines[index])
+        }
+
+        if (briIndexes.size >= 2) {
+            fun getBriAccount(index: Int): String {
+                return lines[index]
+                    .replaceFirst(
+                        Regex("""(?i)^BANK\s+BRI-?5655"""),
+                        ""
+                    )
+                    .trim()
+            }
+
+            senderAccount = getBriAccount(briIndexes[0])
+            recipientAccount = getBriAccount(briIndexes[1])
+
+            fun findNameBefore(
+                index: Int,
+                lowerLimit: Int
+            ): String {
+                for (i in index - 1 downTo lowerLimit) {
+                    if (isNameValue(lines[i])) return lines[i]
+                }
+                return ""
+            }
+
+            val senderName = findNameBefore(briIndexes[0], 0)
+            val recipientName = findNameBefore(
+                briIndexes[1],
+                briIndexes[0] + 1
+            )
+
+            if (senderName.isNotEmpty()) sender = senderName
+            if (recipientName.isNotEmpty()) recipient = recipientName
+        }
 
         return ParsedReceipt(
             type = type,
@@ -448,7 +502,9 @@ class ReceiptPreviewActivity : Activity() {
             date = date,
             time = time,
             sender = sender,
+            senderAccount = senderAccount,
             recipient = recipient,
+            recipientAccount = recipientAccount,
             reference = reference
         )
     }
@@ -468,6 +524,7 @@ class ReceiptPreviewActivity : Activity() {
             type = "image/*"
             addCategory(Intent.CATEGORY_OPENABLE)
         }
+
         startActivityForResult(
             Intent.createChooser(intent, "Pilih screenshot struk"),
             REQUEST_RE_PICK
@@ -475,11 +532,18 @@ class ReceiptPreviewActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_RE_PICK && resultCode == RESULT_OK) {
+
+        if (
+            requestCode == REQUEST_RE_PICK &&
+            resultCode == RESULT_OK
+        ) {
             val uri = data?.data ?: return
-            // Jika gagal, gambar sebelumnya tetap ditampilkan
             loadImage(uri)
         }
     }
@@ -498,10 +562,12 @@ class ReceiptPreviewActivity : Activity() {
             background = rounded(frameBg, 18f)
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
+
         imageView = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Preview screenshot transaksi"
         }
+
         frame.addView(
             imageView,
             FrameLayout.LayoutParams(
@@ -509,21 +575,35 @@ class ReceiptPreviewActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
+
         root.addView(
             frame,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            ).apply {
                 setMargins(dp(16), dp(8), dp(16), dp(8))
             }
         )
 
         infoView = text("", 12f, muted)
+
         root.addView(
             infoView,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
                 setMargins(dp(20), 0, dp(20), dp(4))
             }
         )
-        ocrResultView = text("Hasil pembacaan teks akan muncul di sini.", 13f, dark).apply {
+
+        ocrResultView = text(
+            "Hasil pembacaan teks akan muncul di sini.",
+            13f,
+            dark
+        ).apply {
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
 
@@ -544,8 +624,15 @@ class ReceiptPreviewActivity : Activity() {
         )
 
         root.addView(
-            text("Pastikan teks pada gambar terlihat jelas sebelum diproses.", 12f, muted),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            text(
+                "Pastikan teks pada gambar terlihat jelas sebelum diproses.",
+                12f,
+                muted
+            ),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
                 setMargins(dp(20), 0, dp(20), dp(12))
             }
         )
@@ -566,15 +653,27 @@ class ReceiptPreviewActivity : Activity() {
             isClickable = true
             setOnClickListener { finish() }
         }
+
         bar.addView(back)
 
-        val title = text("Preview Struk", 16f, dark, bold = true).apply {
+        val title = text(
+            "Preview Struk",
+            16f,
+            dark,
+            bold = true
+        ).apply {
             gravity = Gravity.END
         }
+
         bar.addView(
             title,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
         )
+
         return bar
     }
 
@@ -586,23 +685,36 @@ class ReceiptPreviewActivity : Activity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
-        val pickAgain = text("Pilih Ulang", 14f, Color.WHITE, bold = true).apply {
+        val pickAgain = text(
+            "Pilih Ulang",
+            14f,
+            Color.WHITE,
+            bold = true
+        ).apply {
             gravity = Gravity.CENTER
             background = rounded(teal, 14f)
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             setOnClickListener { openPicker() }
         }
+
         bar.addView(
             pickAgain,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         )
+
         return bar
     }
 
     /* ---------------- HELPER ---------------- */
 
-    private fun rounded(color: Int, radiusDp: Float): GradientDrawable =
+    private fun rounded(
+        color: Int,
+        radiusDp: Float
+    ): GradientDrawable =
         GradientDrawable().apply {
             setColor(color)
             cornerRadius = dpF(radiusDp)
