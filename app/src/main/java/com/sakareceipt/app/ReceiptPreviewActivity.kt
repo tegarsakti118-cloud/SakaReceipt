@@ -20,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -192,7 +193,8 @@ class ReceiptPreviewActivity : Activity() {
 
         textRecognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val result = visionText.text.trim()
+                val result = rebuildRows(visionText, bitmap.height).trim()
+                    .ifEmpty { visionText.text.trim() }
                 if (result.isNotEmpty()) {
                     displayParsedResult(result)
                 } else {
@@ -204,6 +206,56 @@ class ReceiptPreviewActivity : Activity() {
                 Log.e(TAG, "OCR gagal", error)
                 ocrResultView.text = "Gagal membaca teks. Silakan coba lagi."
             }
+    }
+
+    /* ---------------- SUSUN ULANG BARIS OCR ---------------- */
+
+    // ML Kit sering memisahkan kolom label (kiri) dan nilai (kanan) menjadi blok berbeda,
+    // sehingga "Nominal" dan "Rp1.150.000" tidak berurutan di teks. Fungsi ini menyatukan
+    // kembali potongan teks yang sejajar secara vertikal berdasarkan posisinya di gambar.
+    private fun rebuildRows(visionText: Text, imageHeight: Int): String {
+        class Piece(val text: String, val left: Int, val centerY: Float, val height: Float)
+
+        val clockRegex = Regex("""^\d{1,2}[:.]\d{2}\b.{0,6}$""")
+        val pieces = mutableListOf<Piece>()
+
+        for (block in visionText.textBlocks) {
+            for (line in block.lines) {
+                val box = line.boundingBox ?: continue
+                val value = line.text.trim()
+                if (value.isEmpty()) continue
+
+                val cy = box.exactCenterY()
+                // Jam status bar HP di bagian paling atas screenshot bukan waktu transaksi.
+                if (imageHeight > 0 && cy < imageHeight * 0.06f && clockRegex.matches(value)) continue
+
+                pieces.add(Piece(value, box.left, cy, box.height().toFloat()))
+            }
+        }
+        if (pieces.isEmpty()) return ""
+
+        pieces.sortBy { it.centerY }
+
+        val rows = mutableListOf<MutableList<Piece>>()
+        var rowCenter = 0f
+        var rowHeight = 0f
+        for (p in pieces) {
+            val current = rows.lastOrNull()
+            val tolerance = 0.5f * minOf(p.height, rowHeight)
+            if (current != null && Math.abs(p.centerY - rowCenter) <= tolerance) {
+                current.add(p)
+                rowCenter = current.map { it.centerY }.average().toFloat()
+                rowHeight = current.map { it.height }.average().toFloat()
+            } else {
+                rows.add(mutableListOf(p))
+                rowCenter = p.centerY
+                rowHeight = p.height
+            }
+        }
+
+        return rows.joinToString("\n") { row ->
+            row.sortedBy { it.left }.joinToString(" ") { it.text }
+        }
     }
 
     /* ---------------- EKSTRAKSI DATA TRANSAKSI ---------------- */
@@ -287,6 +339,7 @@ class ReceiptPreviewActivity : Activity() {
             "bi-fast" in lower -> "Transfer BI-FAST"
             "transfer" in lower -> "Transfer"
             "bank tujuan" in lower || "data penerima" in lower -> "Transfer"
+            "send money" in lower || "kirim uang" in lower -> "Transfer"
             "tarik tunai" in lower || "penarikan" in lower -> "Tarik Tunai"
             "setor tunai" in lower || "setoran" in lower -> "Setor Tunai"
             "token listrik" in lower || "pln prabayar" in lower -> "Token PLN"
@@ -366,7 +419,7 @@ class ReceiptPreviewActivity : Activity() {
         }
 
         val date = Regex(
-            """(?i)\b(?:\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b"""
+            """(?i)\b(?:\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b"""
         ).find(raw)?.value.orEmpty()
 
         val time = Regex(
