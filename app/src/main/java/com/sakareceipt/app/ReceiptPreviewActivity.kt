@@ -225,47 +225,68 @@ class ReceiptPreviewActivity : Activity() {
 
         val lower = raw.lowercase()
 
-        fun findLabelValue(labels: List<String>): String {
-            val headers = Regex(
-                """(?i)^(dari|ke|kepada|pengirim|penerima|nama pengirim|nama penerima|tujuan|biaya(?: transfer)?|admin|fee|nominal|jumlah|total|tanggal|waktu|no\.?\s*(?:transaksi|referensi)|nomor referensi|kode referensi|reference(?:\s*id)?|id transaksi|metode transaksi|pembayaran diterima|jenis transaksi|keterangan|status)\b"""
-            )
+        // Label lain yang menandakan akhir sebuah nilai. Pencarian tidak boleh melewatinya.
+        val labelStop = Regex(
+            """(?i)^(dari|ke|kepada|pengirim|penerima|nama|data|bank|tujuan|rekening|no\.?\s*rekening|no\.?\s*meter|biaya|admin|fee|nominal|jumlah|total|tanggal|waktu|tid|ref|referensi|kode|id|nomor|metode|status|keterangan|pembayaran|jenis)\b"""
+        )
 
-            val appNames = Regex(
-                """(?i)^(qita|seabank|bri|bank bri|dana|gopay|go pay)$"""
-            )
+        // Nama bank atau aplikasi. Tidak boleh dianggap sebagai nama pengirim atau penerima.
+        val bankOrApp = Regex(
+            """(?i)^(qita|seabank|bri|bca|bni|mandiri|bsi|jago|bank\b.*|dana|gopay|go-?pay|ovo|shopeepay|qris)$"""
+        )
 
+        // Kata yang tidak mungkin muncul di dalam nama orang.
+        val nonNameWords = Regex(
+            """(?i)\b(rekening|nominal|transfer|transaksi|berhasil|tujuan|pengirim|penerima|struk|token|pln|bantuan|simpan|terima|kasih|tid|total|admin|biaya)\b"""
+        )
+
+        fun isNameValue(value: String): Boolean {
+            if (value.length < 2 || value.length > 60) return false
+            if (value.none { it.isLetter() }) return false
+            if (value.any { it.isDigit() }) return false
+            if (value.contains("xxx", ignoreCase = true)) return false
+            if (labelStop.containsMatchIn(value)) return false
+            if (bankOrApp.matches(value)) return false
+            if (nonNameWords.containsMatchIn(value)) return false
+            return true
+        }
+
+        fun isReferenceValue(value: String): Boolean {
+            if (labelStop.containsMatchIn(value)) return false
+            if (!Regex("""[A-Za-z0-9][A-Za-z0-9\-/]{3,}""").matches(value)) return false
+            return value.any { it.isDigit() }
+        }
+
+        // Mencari nilai setelah label. Nilai boleh berada di baris yang sama
+        // atau di maksimal 2 baris berikutnya. Berhenti jika bertemu label lain.
+        fun findValue(labels: List<String>, isValid: (String) -> Boolean): String {
             for (i in lines.indices) {
                 for (label in labels) {
-                    val pattern = Regex(
-                        """(?i)^${Regex.escape(label)}\b\s*[:：-]?\s*(.*)$"""
+                    val labelRegex = Regex(
+                        "^${Regex.escape(label)}\\b\\s*[:：-]?\\s*(.*)$",
+                        RegexOption.IGNORE_CASE
                     )
-
-                    val match = pattern.find(lines[i]) ?: continue
+                    val match = labelRegex.find(lines[i]) ?: continue
                     val sameLine = match.groupValues[1].trim()
 
-                    if (sameLine.isNotEmpty()) {
-                        if (!appNames.matches(sameLine)) return sameLine
-                        continue
-                    }
+                    if (sameLine.isNotEmpty() && isValid(sameLine)) return sameLine
 
-                    for (j in i + 1 until minOf(i + 4, lines.size)) {
-                        val candidate = lines[j].trim()
-
-                        if (candidate.isEmpty()) continue
-                        if (headers.containsMatchIn(candidate)) break
-                        if (appNames.matches(candidate)) continue
-
-                        return candidate
+                    for (j in i + 1 until minOf(i + 3, lines.size)) {
+                        val next = lines[j]
+                        if (labelStop.containsMatchIn(next)) break
+                        if (bankOrApp.matches(next)) continue
+                        if (isValid(next)) return next
+                        break
                     }
                 }
             }
-
             return ""
         }
 
         val type = when {
             "bi-fast" in lower -> "Transfer BI-FAST"
             "transfer" in lower -> "Transfer"
+            "bank tujuan" in lower || "data penerima" in lower -> "Transfer"
             "tarik tunai" in lower || "penarikan" in lower -> "Tarik Tunai"
             "setor tunai" in lower || "setoran" in lower -> "Setor Tunai"
             "token listrik" in lower || "pln prabayar" in lower -> "Token PLN"
@@ -275,72 +296,73 @@ class ReceiptPreviewActivity : Activity() {
             else -> ""
         }
 
-        // Prioritaskan nominal transaksi, bukan biaya admin atau total akhir.
+        // ---- Nominal ----
+        val rpAmount = Regex("""(?i)rp\.?\s*\d[\d.,]*""")
+        val plainAmount = Regex("""\d{1,3}(?:[.,]\d{3})+""")
+        val excludedAmountLine = Regex("""(?i)\b(biaya|admin|fee|total|pajak|saldo)\b""")
+        val adminLine = Regex("""(?i)\b(biaya|admin|fee)\b""")
+        val totalLine = Regex("""(?i)\btotal\b""")
+        val hasAdminFee = lines.any { adminLine.containsMatchIn(it) }
+
+        // Nominal dari satu teks. Baris biaya, admin, total, dan saldo selalu diabaikan.
+        fun amountIn(text: String, allowPlain: Boolean): String {
+            if (excludedAmountLine.containsMatchIn(text)) return ""
+            val rp = rpAmount.find(text)?.value
+            if (rp != null) return rp.trimEnd('.', ',')
+            if (!allowPlain) return ""
+            return plainAmount.find(text)?.value.orEmpty()
+        }
+
+        // Prioritas 1: nominal yang diberi label.
         val amountLabels = listOf(
-            "jumlah transfer",
-            "nominal transfer",
-            "nominal pembayaran",
-            "jumlah pembayaran",
-            "nominal",
-            "jumlah"
+            "jumlah transfer", "nominal transfer", "nominal pembayaran",
+            "jumlah pembayaran", "nominal", "jumlah"
         )
 
         var amount = ""
-
-        for (label in amountLabels) {
-            val labelPattern = Regex(
-                """^\s*${Regex.escape(label)}\s*[:：-]?\s*(.*)$""",
+        labelLoop@ for (label in amountLabels) {
+            val labelRegex = Regex(
+                "^${Regex.escape(label)}\\b\\s*[:：-]?\\s*(.*)$",
                 RegexOption.IGNORE_CASE
             )
-
             for (i in lines.indices) {
-                val match = labelPattern.find(lines[i]) ?: continue
-                val candidates = mutableListOf<String>()
+                val match = labelRegex.find(lines[i]) ?: continue
+                val sameLine = match.groupValues[1].trim()
 
-                candidates.add(match.groupValues[1].trim())
-
-                if (candidates[0].isEmpty()) {
-                    for (j in i + 1 until minOf(i + 4, lines.size)) {
-                        val nextLine = lines[j]
-
-                        if (nextLine.contains("biaya", true) ||
-                            nextLine.contains("admin", true) ||
-                            nextLine.contains("fee", true)
-                        ) break
-
-                        candidates.add(nextLine)
-                    }
+                val fromSameLine = amountIn(sameLine, allowPlain = true)
+                if (fromSameLine.isNotEmpty()) {
+                    amount = fromSameLine
+                    break@labelLoop
                 }
 
-                for (candidate in candidates) {
-                    if (candidate.contains("biaya", true) ||
-                        candidate.contains("admin", true) ||
-                        candidate.contains("fee", true)
-                    ) continue
-
-                    val found = Regex(
-                        """rp\s*[0-9][0-9.,]*""",
-                        RegexOption.IGNORE_CASE
-                    ).find(candidate)?.value
-
-                    if (found != null) {
-                        amount = found
-                        break
+                // Nilai di baris berikutnya, hanya jika baris itu bukan label lain.
+                if (sameLine.isEmpty() && i + 1 < lines.size &&
+                    !labelStop.containsMatchIn(lines[i + 1])
+                ) {
+                    val fromNextLine = amountIn(lines[i + 1], allowPlain = false)
+                    if (fromNextLine.isNotEmpty()) {
+                        amount = fromNextLine
+                        break@labelLoop
                     }
                 }
-
-                if (amount.isNotEmpty()) break
             }
-
-            if (amount.isNotEmpty()) break
         }
 
-        // Fallback hanya jika label nominal tidak ditemukan.
+        // Fallback 1: hanya jika tepat satu nominal Rp di luar baris biaya dan total.
         if (amount.isEmpty()) {
-            amount = Regex(
-                """rp\s*[0-9][0-9.,]*""",
-                RegexOption.IGNORE_CASE
-            ).find(raw)?.value.orEmpty()
+            val candidates = lines.map { amountIn(it, allowPlain = false) }
+                .filter { it.isNotEmpty() }
+                .distinct()
+            if (candidates.size == 1) amount = candidates[0]
+        }
+
+        // Fallback 2: total dipakai hanya jika struk tidak punya biaya admin (misalnya token PLN).
+        if (amount.isEmpty() && !hasAdminFee) {
+            val totals = lines
+                .filter { totalLine.containsMatchIn(it) }
+                .mapNotNull { rpAmount.find(it)?.value?.trimEnd('.', ',') }
+                .distinct()
+            if (totals.size == 1) amount = totals[0]
         }
 
         val date = Regex(
@@ -351,22 +373,20 @@ class ReceiptPreviewActivity : Activity() {
             """\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b"""
         ).find(raw)?.value.orEmpty()
 
-        val reference = findLabelValue(
-            listOf(
-                "No. Referensi",
-                "Nomor Referensi",
-                "Kode Referensi",
-                "Reference ID",
-                "Reference",
-                "Ref"
-            )
+        // Nomor referensi hanya dari label referensi. ID transaksi tidak dipakai.
+        val reference = findValue(
+            listOf("No. Referensi", "Nomor Referensi", "Kode Referensi", "Reference ID", "Reference", "Ref"),
+            { isReferenceValue(it) }
         )
 
-        val sender = findLabelValue(
-            listOf("Nama Pengirim", "Pengirim", "Dari")
+        val sender = findValue(
+            listOf("Nama Pengirim", "Pengirim", "Dari"),
+            { isNameValue(it) }
         )
-        val recipient = findLabelValue(
-            listOf("Nama Penerima", "Penerima", "Kepada", "Ke", "Tujuan")
+
+        val recipient = findValue(
+            listOf("Nama Penerima", "Penerima", "Kepada", "Ke", "Tujuan"),
+            { isNameValue(it) }
         )
 
         return ParsedReceipt(
