@@ -1,3 +1,4 @@
+```kotlin
 package com.sakareceipt.app
 
 import android.app.Activity
@@ -30,10 +31,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-
-/* ------------------------------------------------------------------ */
-/*  IKON VEKTOR (digambar dengan Canvas, tidak perlu file drawable)    */
-/* ------------------------------------------------------------------ */
 
 enum class IconType {
     RECEIPT, TRANSFER, BOLT, DOCUMENT, HISTORY, CALENDAR,
@@ -188,13 +185,8 @@ class IconView(
     }
 }
 
-/* ------------------------------------------------------------------ */
-/*  ACTIVITY                                                           */
-/* ------------------------------------------------------------------ */
-
 class MainActivity : Activity() {
 
-    // Palet warna
     private val teal = Color.rgb(23, 168, 151)
     private val tealDark = Color.rgb(11, 112, 102)
     private val tealSoft = Color.rgb(224, 246, 243)
@@ -227,98 +219,14 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        installCrashCatcher()
-
-        // Jika peluncuran sebelumnya crash, tampilkan penyebabnya di layar
-        val prefs = getSharedPreferences("crash_log", MODE_PRIVATE)
-        val lastCrash = prefs.getString("last", null)
-        if (lastCrash != null) {
-            prefs.edit().remove("last").apply()
-            showCrashScreen(lastCrash)
-            return
-        }
-
         try {
             setupEdgeToEdge()
             showDashboard()
             applyNavBarAppearance()
         } catch (t: Throwable) {
-            showCrashScreen(Log.getStackTraceString(t))
+            Toast.makeText(this, "Error: ${t.message}", Toast.LENGTH_LONG).show()
         }
     }
-
-    /* ---------------- PENANGKAP CRASH (untuk debugging dari HP) ---------------- */
-
-    private fun installCrashCatcher() {
-        val prefs = getSharedPreferences("crash_log", MODE_PRIVATE)
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            try {
-                prefs.edit().putString("last", Log.getStackTraceString(error)).commit()
-            } catch (ignored: Throwable) {
-            }
-            previous?.uncaughtException(thread, error)
-        }
-    }
-
-    private fun showCrashScreen(trace: String) {
-        val info = TextView(this).apply {
-            text = trace
-            textSize = 11f
-            typeface = Typeface.MONOSPACE
-            setTextColor(dark)
-            setTextIsSelectable(true)
-        }
-
-        val title = text("SakaReceipt berhenti karena error", 16f, dark, bold = true)
-        val hint = text(
-            "Tekan \"Salin error\" lalu kirim teksnya ke Claude.",
-            12f, muted
-        )
-
-        val copyBtn = Button(this).apply {
-            text = "Salin error"
-            setOnClickListener {
-                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("SakaReceipt error", trace))
-                Toast.makeText(this@MainActivity, "Error disalin", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        val retryBtn = Button(this).apply {
-            text = "Coba buka aplikasi"
-            setOnClickListener {
-                try {
-                    setupEdgeToEdge()
-                    showDashboard()
-                    applyNavBarAppearance()
-                } catch (t: Throwable) {
-                    showCrashScreen(Log.getStackTraceString(t))
-                }
-            }
-        }
-
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(title)
-            addView(gapV(6))
-            addView(hint)
-            addView(gapV(12))
-            addView(copyBtn)
-            addView(retryBtn)
-            addView(gapV(12))
-            addView(info)
-        }
-
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(bg)
-            addView(column)
-        })
-    }
-
-    /* ---------------- SYSTEM BARS ---------------- */
 
     @Suppress("DEPRECATION")
     private fun setupEdgeToEdge() {
@@ -338,8 +246,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Dipanggil SETELAH setContentView. Memanggil insetsController sebelum itu
-    // bisa crash (NullPointerException) di Android 11/12.
     private fun applyNavBarAppearance() {
         try {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -367,7 +273,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Padding mengikuti status bar, gesture bar, poni, dan lebar layar (tablet/lipat)
     private fun applyInsets() {
         val screenW = resources.displayMetrics.widthPixels
         val contentW = minOf(screenW, dp(600))
@@ -388,8 +293,6 @@ class MainActivity : Activity() {
             dp(8) + insetR, dp(8) + insetB
         )
     }
-
-    /* ---------------- SCREEN ---------------- */
 
     private fun showDashboard() {
         val root = LinearLayout(this).apply {
@@ -412,14 +315,10 @@ class MainActivity : Activity() {
         }
         column.addView(bodyView, matchWrap())
 
-        val animated = mutableListOf<View>(headerView)
-
-        fun add(v: View, params: ViewGroup.LayoutParams? = null, animate: Boolean = true) {
+        fun add(v: View, params: ViewGroup.LayoutParams? = null) {
             if (params != null) bodyView.addView(v, params) else bodyView.addView(v)
-            if (animate) animated.add(v)
         }
 
-        // Kartu statistik menimpa sebagian header
         add(
             statsRow(),
             LinearLayout.LayoutParams(
@@ -428,9 +327,9 @@ class MainActivity : Activity() {
             ).apply { topMargin = -dp(34) }
         )
 
-        add(gapV(26), animate = false)
+        add(gapV(26))
         add(sectionLabel("BUAT STRUK BARU"))
-        add(gapV(12), animate = false)
+        add(gapV(12))
 
         add(tileRow(
             menuTile(
@@ -442,7 +341,7 @@ class MainActivity : Activity() {
                 "Token PLN", "Pembelian token listrik"
             ) { openFeature("Token PLN") }
         ))
-        add(gapV(12), animate = false)
+        add(gapV(12))
         add(tileRow(
             menuTile(
                 IconType.DOCUMENT, violet, violetSoft,
@@ -454,13 +353,13 @@ class MainActivity : Activity() {
             ) { openFeature("Riwayat") }
         ))
 
-        add(gapV(26), animate = false)
+        add(gapV(26))
         add(sectionLabel("PENGATURAN"))
-        add(gapV(12), animate = false)
+        add(gapV(12))
         add(settingRow(
             IconType.PRINTER, "Printer Bluetooth", "Hubungkan printer thermal"
         ) { openFeature("Printer Bluetooth") })
-        add(gapV(10), animate = false)
+        add(gapV(10))
         add(settingRow(
             IconType.STORE, "Pengaturan Usaha", "Identitas dan informasi usaha"
         ) { openFeature("Pengaturan Usaha") })
@@ -489,25 +388,7 @@ class MainActivity : Activity() {
 
         setContentView(root)
         root.requestApplyInsets()
-
-        animateIn(animated)
     }
-
-    private fun animateIn(views: List<View>) {
-        views.forEachIndexed { index, v ->
-            v.alpha = 0f
-            v.translationY = dpF(14f)
-            v.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay(50L * index)
-                .setDuration(320L)
-                .start()
-        }
-    }
-
-    // Gambar yang dipilih pengguna (dipakai di tahap OCR berikutnya)
-    private var selectedImageUri: Uri? = null
 
     @Suppress("DEPRECATION")
     private fun openImagePicker() {
@@ -521,15 +402,11 @@ class MainActivity : Activity() {
         )
     }
 
-        @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_PICK_IMAGE && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
-            selectedImageUri = uri
-
-            // Kirim URI ke layar preview. Flag ini memberi izin baca sementara
-            // agar layar preview bisa membuka gambar dari galeri.
             val intent = Intent(this, ReceiptPreviewActivity::class.java).apply {
                 setData(uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -537,16 +414,14 @@ class MainActivity : Activity() {
             startActivity(intent)
         }
     }
+
     private fun openFeature(name: String) {
         when (name) {
-            "Bukti Transaksi" -> openImagePicker()
+            "Bukti Transaksi", "Token PLN" -> openImagePicker()
             else -> Toast.makeText(this, "$name segera hadir", Toast.LENGTH_SHORT).show()
         }
     }
 
-    /* ---------------- HEADER ---------------- */
-
-    // Header dengan dua lingkaran dekoratif tipis
     private inner class HeaderLayout(context: Context) : LinearLayout(context) {
         private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
 
@@ -572,7 +447,6 @@ class MainActivity : Activity() {
             intArrayOf(teal, tealDark)
         ).apply { cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r) }
 
-        // Baris merek
         val brand = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -602,11 +476,9 @@ class MainActivity : Activity() {
         )
     }
 
-    // Baris horizontal yang semua anaknya otomatis setinggi anak tertinggi
     private inner class EqualRow(context: Context) : LinearLayout(context) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-
             var maxH = 0
             for (i in 0 until childCount) {
                 val c = getChildAt(i)
@@ -624,8 +496,6 @@ class MainActivity : Activity() {
             setMeasuredDimension(measuredWidth, maxH + paddingTop + paddingBottom)
         }
     }
-
-    /* ---------------- STATISTIK ---------------- */
 
     private fun statsRow(): View = EqualRow(this).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -648,7 +518,6 @@ class MainActivity : Activity() {
         setPadding(dp(14), dp(14), dp(14), dp(14))
         background = rounded(Color.WHITE, 20f)
         elevation = dpF(5f)
-        contentDescription = "$label: $number"
 
         addView(iconChip(icon, tint, soft, 44, 22))
 
@@ -664,8 +533,6 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
     }
-
-    /* ---------------- MENU UTAMA ---------------- */
 
     private fun tileRow(left: View, right: View): View = EqualRow(this).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -684,7 +551,6 @@ class MainActivity : Activity() {
         background = rippleBg(Color.WHITE, 20f)
         elevation = dpF(2f)
         isClickable = true
-        contentDescription = "$title. $desc"
         setOnClickListener { onClick() }
 
         addView(iconChip(icon, tint, soft, 46, 24))
@@ -693,8 +559,6 @@ class MainActivity : Activity() {
         addView(gapV(4))
         addView(text(desc, 12f, muted, maxLines = 2))
     }
-
-    /* ---------------- PENGATURAN ---------------- */
 
     private fun settingRow(
         icon: IconType, title: String, desc: String, onClick: () -> Unit
@@ -705,7 +569,6 @@ class MainActivity : Activity() {
         background = rippleBg(Color.WHITE, 18f)
         elevation = dpF(2f)
         isClickable = true
-        contentDescription = "$title. $desc"
         setOnClickListener { onClick() }
 
         addView(iconChip(icon, teal, tealSoft, 46, 24))
@@ -727,8 +590,6 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(dp(20), dp(20))
         )
     }
-
-    /* ---------------- BOTTOM NAV ---------------- */
 
     private fun buildBottomBar(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -759,7 +620,6 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER
         setPadding(0, dp(4), 0, dp(2))
         isClickable = true
-        contentDescription = label
         setOnClickListener { onClick() }
 
         val color = if (selected) teal else muted
@@ -777,8 +637,6 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
         })
     }
-
-    /* ---------------- HELPER ---------------- */
 
     private fun rounded(color: Int, radiusDp: Float): GradientDrawable =
         GradientDrawable().apply {
@@ -840,8 +698,8 @@ class MainActivity : Activity() {
         ViewGroup.LayoutParams.WRAP_CONTENT
     )
 
-    // Lebar bagi rata. Tinggi disamakan oleh EqualRow, bukan oleh MATCH_PARENT.
     private fun weightParams() = LinearLayout.LayoutParams(
         0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
     )
 }
+```
